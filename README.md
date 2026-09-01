@@ -10,19 +10,30 @@ Source code is versioned in git. Application data (listings, photos, SQLite) liv
 
 ### Getting the code
 
-| Method | Account needed? |
-|--------|-----------------|
-| **Cursor origin** (this repo) | Yes — free [Cursor](https://cursor.com) login + `origin auth login` (wizard can install Git) |
-| **Public GitHub mirror** | No account for read-only `git clone` (if you publish or mirror the repo as public) |
-| **Copy the folder** (USB, AirDrop, zip) | No — run `bash scripts/launch-wizard.sh` inside the folder; no clone required |
+**Public clone (no account):**
 
 ```bash
-# Cursor-hosted (private — you must be logged in)
-origin auth login
-git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
+git clone https://github.com/nativestrider/realtor-os.git RealtorOS
 cd RealtorOS
 bash scripts/launch-wizard.sh
 ```
+
+| Method | Account needed? |
+|--------|-----------------|
+| **GitHub** (public) | No — anyone can `git clone` the URL above |
+| **Cursor origin** (private copy) | Yes — [Cursor](https://cursor.com) login + `origin auth login` |
+| **Copy the folder** (USB, AirDrop, zip) | No — run the wizard inside the folder |
+
+Cursor Origin does **not** offer public repositories (only Internal/Private). The GitHub repo is the public source; Cursor origin stays in sync for your private Cursor workflow:
+
+```bash
+# Optional — private Cursor remote (requires login)
+origin auth login
+git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
+```
+
+- **GitHub:** https://github.com/nativestrider/realtor-os  
+- **Cursor codebase:** https://cursor.com/codebase/nativestride/realtor-os
 
 The wizard installs **Node.js**, **Git** (optional), **pnpm**, and **Playwright Chromium** — you do not need to install them manually first.
 

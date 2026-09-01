@@ -16,20 +16,22 @@ For day-to-day usage see [README.md](../README.md). For guided first-time setup,
 | | `~/.realtor-os/browser.json` — **re-run** `pnpm run setup:browsers` on each OS |
 
 ```bash
-git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
+git clone https://github.com/nativestrider/realtor-os.git RealtorOS
 cd RealtorOS
+bash scripts/launch-wizard.sh
 ```
 
-**Cursor codebase:** https://cursor.com/codebase/nativestride/realtor-os
+**Public GitHub:** https://github.com/nativestrider/realtor-os  
+**Cursor origin (private):** https://cursor.com/codebase/nativestride/realtor-os
 
 ### Do I need Cursor, GitHub, or Git to start?
 
 | Goal | What you need |
 |------|----------------|
-| **Run RealtorOS** | The project folder on disk + wizard (`bash scripts/launch-wizard.sh`). Git is **not** required if someone copied the folder to you. |
-| **Clone from Cursor origin** | Cursor account, [origin CLI](https://cursor.com) login (`origin auth login`), and Git. Repo is **private** to your Cursor namespace. |
-| **Clone from public GitHub** | Only Git — no account for anonymous read-only clone of a **public** repo (if you mirror RealtorOS there). |
-| **No git, no account** | Copy `RealtorOS/` via USB, AirDrop, or zip; then run the wizard inside that folder. |
+| **Run RealtorOS** | The project folder + wizard. Git is **not** required if someone copied the folder to you. |
+| **Clone publicly** | `git clone https://github.com/nativestrider/realtor-os.git` — **no account** |
+| **Clone from Cursor origin** | Cursor account + `origin auth login` (repo is **private** on Origin) |
+| **No git, no account** | Copy the folder via USB/AirDrop/zip; run the wizard inside it |
 
 The wizard can install **Git** and **Node.js** for you, but it does **not** clone the repository — you need the files first (clone, copy, or zip).
 
@@ -67,21 +69,18 @@ In the app Model dropdown, prefer **GPT-5.4**. The “Default” model may be at
 ### 1. Clone the repository
 
 ```bash
-git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
+git clone https://github.com/nativestrider/realtor-os.git RealtorOS
 cd RealtorOS
+bash scripts/launch-wizard.sh   # recommended — installs Node, Git, pnpm, Chromium
 ```
 
-On **macOS** (e.g. MacBook Air): clone the repo, then run the wizard — it runs `pnpm install`, `setup:browsers`, CLI checks, and opens the app:
+On **macOS** (e.g. MacBook Air): same commands — no Linux `DISPLAY` setup.
 
-```bash
-git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
-cd RealtorOS
-bash scripts/launch-wizard.sh
-```
+You only need a terminal and internet. The wizard installs **Node.js**, **Git** (optional), **pnpm**, and **Playwright Chromium**.
 
-You only need a terminal and internet. The wizard installs **Node.js** (if missing), **pnpm**, and **Playwright Chromium** — no manual downloads required on Mac or Linux.
+### 2. Install Node dependencies
 
-Manual install (without wizard) is in the steps below.
+Skip if you used the wizard. Otherwise:
 
 ```bash
 pnpm install
