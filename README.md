@@ -8,14 +8,25 @@ Inspired by [open-design](https://github.com/nexu-io/open-design) runtime adapte
 
 Source code is versioned in git. Application data (listings, photos, SQLite) lives in `~/.realtor-os/` and is **not** in the repo — back it up separately when moving machines.
 
+### Getting the code
+
+| Method | Account needed? |
+|--------|-----------------|
+| **Cursor origin** (this repo) | Yes — free [Cursor](https://cursor.com) login + `origin auth login` (wizard can install Git) |
+| **Public GitHub mirror** | No account for read-only `git clone` (if you publish or mirror the repo as public) |
+| **Copy the folder** (USB, AirDrop, zip) | No — run `bash scripts/launch-wizard.sh` inside the folder; no clone required |
+
 ```bash
+# Cursor-hosted (private — you must be logged in)
+origin auth login
 git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
 cd RealtorOS
+bash scripts/launch-wizard.sh
 ```
 
-Replace `nativestride` with your Cursor namespace if you fork or use a team org. SSH clone URLs from the codebase page also work.
+The wizard installs **Node.js**, **Git** (optional), **pnpm**, and **Playwright Chromium** — you do not need to install them manually first.
 
-**Move to another computer:** clone this repo, copy `~/.realtor-os/`, then follow [docs/INSTALL.md](docs/INSTALL.md).
+**Move to another computer:** clone or copy the folder, copy `~/.realtor-os/`, then run the wizard.
 
 ## Quick start
 

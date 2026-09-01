@@ -44,6 +44,7 @@ banner() {
   printf '%s  Welcome! This setup will help you chat with AI assistants\n' "$DIM"
   printf '  (like Claude, ChatGPT Codex, or Kimi) right in your web browser.\n\n'
   printf '  We will:\n'
+  printf '    • install Node.js and Git if your computer does not have them yet\n'
   printf '    • make sure your computer is ready\n'
   printf '    • install the browser used for Zillow imports\n'
   printf '    • ask which AI assistants you want to use\n'
@@ -550,6 +551,54 @@ node_major_version() {
   node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo 0
 }
 
+activate_fnm_env() {
+  local fnm_dir="${HOME}/.local/share/fnm"
+  export PATH="${fnm_dir}:${HOME}/.local/bin:${PATH}"
+  if [[ -x "${fnm_dir}/fnm" ]]; then
+    # shellcheck disable=SC2046
+    eval "$("${fnm_dir}/fnm" env)"
+  fi
+}
+
+install_node_with_wizard() {
+  step "Installing Node.js 22 LTS (one moment)…"
+  if bash "$ROOT/scripts/install-node.sh"; then
+    activate_fnm_env
+    hash -r 2>/dev/null || true
+    ok_msg "Node.js installed ($(node --version))"
+    return 0
+  fi
+  warn "Automatic Node.js install failed."
+  return 1
+}
+
+node_manual_install_hint() {
+  open_url "https://nodejs.org/en/download"
+  step "Download the LTS installer from that page, install it, then run this setup again:"
+  note "  bash scripts/launch-wizard.sh"
+}
+
+install_git_with_wizard() {
+  step "Installing Git (one moment)…"
+  local status=0
+  bash "$ROOT/scripts/install-git.sh" || status=$?
+  if (( status == 0 )) && cmd_exists git; then
+    ok_msg "Git installed ($(git --version))"
+    return 0
+  fi
+  if (( status == 2 )); then
+    warn "Complete the system installer, then run this wizard again."
+    return 1
+  fi
+  warn "Automatic Git install failed."
+  return 1
+}
+
+git_manual_install_hint() {
+  open_url "https://git-scm.com/downloads"
+  step "Install Git from that page if you want to clone or pull updates later."
+}
+
 check_claude_login() {
   cmd_exists claude || return 1
   claude auth status 2>/dev/null | grep -q '"loggedIn"[[:space:]]*:[[:space:]]*true'
@@ -690,26 +739,45 @@ NODE
 
 banner "RealtorOS — let's get you chatting"
 
-# ── 1. Node.js ────────────────────────────────────────────────────────────
+# ── 1. Node.js + Git ────────────────────────────────────────────────────────
 stage "Is your computer ready?"
-say "RealtorOS needs a free program called Node.js to run."
-say "Most developers already have it — let's see if you do."
+activate_fnm_env
+say "RealtorOS needs Node.js to run."
+say "Let's check — and install it for you if it's missing."
 if cmd_exists node; then
   NODE_MAJOR="$(node_major_version)"
-  say "Good news — Node.js is installed ($(node --version))."
+  say "Node.js is present ($(node --version))."
   if (( NODE_MAJOR < 20 )); then
-    warn "Yours is a bit old. You'll need a newer version to continue."
-    open_url "https://nodejs.org/en/download"
-    step "Click the big green 'LTS' button to download, install it, then run this setup again."
-    exit 1
+    warn "This version is too old (need 20+)."
+    if confirm "Install Node.js 22 LTS now"; then
+      install_node_with_wizard || { node_manual_install_hint; exit 1; }
+    else
+      node_manual_install_hint
+      exit 1
+    fi
   fi
 else
-  warn "Node.js isn't installed yet — but that's easy to fix."
-  open_url "https://nodejs.org/en/download"
-  step "Click the big green 'LTS' button to download and install it."
-  step "When done, close this window, open a new one, and run:"
-  note "  bash scripts/launch-wizard.sh"
-  exit 1
+  warn "Node.js isn't installed yet."
+  if confirm "Install Node.js 22 LTS now (recommended)"; then
+    install_node_with_wizard || { node_manual_install_hint; exit 1; }
+  else
+    node_manual_install_hint
+    exit 1
+  fi
+fi
+
+note ""
+say "Git is used to download updates later (optional to run the app today)."
+if cmd_exists git; then
+  ok_msg "Git is installed ($(git --version))"
+else
+  warn "Git isn't installed."
+  if confirm "Install Git now (recommended)"; then
+    install_git_with_wizard || git_manual_install_hint
+  else
+    note "Skipping Git — you can still run RealtorOS from this folder."
+    note "To get updates later, install Git or copy a fresh folder from someone who has the repo."
+  fi
 fi
 pause "Press Enter to continue"
 

@@ -22,15 +22,26 @@ cd RealtorOS
 
 **Cursor codebase:** https://cursor.com/codebase/nativestride/realtor-os
 
+### Do I need Cursor, GitHub, or Git to start?
+
+| Goal | What you need |
+|------|----------------|
+| **Run RealtorOS** | The project folder on disk + wizard (`bash scripts/launch-wizard.sh`). Git is **not** required if someone copied the folder to you. |
+| **Clone from Cursor origin** | Cursor account, [origin CLI](https://cursor.com) login (`origin auth login`), and Git. Repo is **private** to your Cursor namespace. |
+| **Clone from public GitHub** | Only Git — no account for anonymous read-only clone of a **public** repo (if you mirror RealtorOS there). |
+| **No git, no account** | Copy `RealtorOS/` via USB, AirDrop, or zip; then run the wizard inside that folder. |
+
+The wizard can install **Git** and **Node.js** for you, but it does **not** clone the repository — you need the files first (clone, copy, or zip).
+
 ---
 
 ## Software stack
 
 | Component | Required? | Version | Purpose | Install |
 |-----------|-----------|---------|---------|---------|
-| **Node.js** | Yes | 20+ (LTS) | Runtime for daemon, web UI, scripts | https://nodejs.org/en/download |
+| **Node.js** | Yes | 20+ (LTS) | Runtime for daemon, web UI, scripts | Wizard installs via fnm/Homebrew, or https://nodejs.org |
 | **pnpm** | Yes | 10.28+ (see `packageManager` in root `package.json`) | Monorepo package manager | `corepack enable && corepack prepare pnpm@10.28.0 --activate` or https://pnpm.io/installation |
-| **Git** | Recommended | any recent | Clone/update the repo | https://git-scm.com/downloads |
+| **Git** | For clone/updates | any recent | Clone and pull the repo | Wizard installs on Mac/Linux, or https://git-scm.com/downloads |
 | **Claude Code CLI** | One of three | latest | `claude` agent | https://docs.anthropic.com/en/docs/claude-code/overview |
 | **Codex CLI** | One of three | latest | `codex` agent (OpenAI / ChatGPT) | https://developers.openai.com/codex/cli/ |
 | **Kimi Code CLI** | One of three | latest | `kimi` agent | https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started.html |
@@ -60,9 +71,17 @@ git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
 cd RealtorOS
 ```
 
-On **macOS** (e.g. MacBook Air): same steps — no Linux `DISPLAY` setup; run `pnpm run setup:browsers` once for the Mac Chromium build.
+On **macOS** (e.g. MacBook Air): clone the repo, then run the wizard — it runs `pnpm install`, `setup:browsers`, CLI checks, and opens the app:
 
-### 2. Install Node dependencies
+```bash
+git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
+cd RealtorOS
+bash scripts/launch-wizard.sh
+```
+
+You only need a terminal and internet. The wizard installs **Node.js** (if missing), **pnpm**, and **Playwright Chromium** — no manual downloads required on Mac or Linux.
+
+Manual install (without wizard) is in the steps below.
 
 ```bash
 pnpm install
@@ -184,10 +203,10 @@ tar czvf realtor-os-backup-$(date +%Y%m%d).tar.gz \
 ### Restore after reinstall or Mac migration
 
 1. `git clone` (or `git pull` on an existing checkout).
-2. `pnpm install` + `pnpm run setup:browsers` on the **new** machine (do not copy Linux `browser.json` to Mac).
-3. Copy `~/.realtor-os/` from the old machine (`rsync`, AirDrop, or tarball — see backup below).
-4. Reinstall and sign in to AI CLIs (`claude` / `codex` / `kimi`).
-5. Start with `pnpm dev` or `bash scripts/launch-wizard.sh`.
+2. Copy `~/.realtor-os/` from the old machine if you want existing listings (`rsync`, AirDrop, or tarball — see backup below).
+3. Run **`bash scripts/launch-wizard.sh`** — installs deps, Chromium, checks CLIs, sign-in, and starts the app.
+
+Or manually: `pnpm install`, `pnpm run setup:browsers`, sign in to CLIs, `pnpm dev`.
 
 If you restore `server.token`, old bookmarked URLs with `#token=...` keep working. If you let the app create a new token, use the new URL printed on startup.
 
@@ -262,7 +281,9 @@ Use this after a new OS install or new computer:
 | Dev server | `pnpm dev` | Daily development |
 | Build | `pnpm build` | Production build |
 | Typecheck | `pnpm typecheck` | CI / pre-commit |
-| Browser setup | `pnpm run setup:browsers` | After install; after OS reinstall |
+| Browser setup | `pnpm run setup:browsers` | After install; wizard does this too |
+| Node setup | `bash scripts/install-node.sh` | Standalone Node 22 install (wizard calls this) |
+| Git setup | `bash scripts/install-git.sh` | Standalone Git install (wizard calls this) |
 | Browser deps (Linux) | `pnpm run setup:browsers:deps` | Chromium launch failures |
 | Launch wizard | `bash scripts/launch-wizard.sh` | First-time or full re-setup |
 
