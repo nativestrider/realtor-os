@@ -6,6 +6,23 @@ For day-to-day usage see [README.md](../README.md). For guided first-time setup,
 
 ---
 
+## One-command install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash
+```
+
+This script:
+
+1. Clones (or updates) the repo into **`~/RealtorOS`** (override with `REALTOR_INSTALL_DIR`)
+2. Runs **`scripts/launch-wizard.sh`**, which installs Node.js, Git, pnpm, Playwright Chromium, checks your AI CLIs, and opens the app
+
+You do **not** need Node, Git, or pnpm installed beforehand — the wizard installs what it can. You still need to sign in to Claude / Codex / Kimi when prompted.
+
+**Only Node required for `curl | bash`:** the pipe runs in `bash`; if `curl` is missing, install it via your OS package manager first.
+
+---
+
 ## Repository vs local data
 
 | In git (clone on each machine) | Not in git (copy manually) |
@@ -285,6 +302,7 @@ Use this after a new OS install or new computer:
 | Git setup | `bash scripts/install-git.sh` | Standalone Git install (wizard calls this) |
 | Browser deps (Linux) | `pnpm run setup:browsers:deps` | Chromium launch failures |
 | Launch wizard | `bash scripts/launch-wizard.sh` | First-time or full re-setup |
+| Full install | `bash scripts/install.sh` or `curl …/install.sh \| bash` | Clone + wizard in one step |
 
 ---
 

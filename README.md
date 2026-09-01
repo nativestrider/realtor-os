@@ -41,7 +41,17 @@ The wizard installs **Node.js**, **Git** (optional), **pnpm**, and **Playwright 
 
 ## Quick start
 
-**New machine or OS reinstall?** See **[docs/INSTALL.md](docs/INSTALL.md)** for the full software list, backup paths, and reinstall checklist.
+### One command (Mac or Linux)
+
+Downloads the app to `~/RealtorOS` and runs the setup wizard (Node, Git, pnpm, Chromium, AI sign-in):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash
+```
+
+Custom folder: `REALTOR_INSTALL_DIR=~/dev/RealtorOS curl -fsSL … | bash`
+
+**New machine or OS reinstall?** See **[docs/INSTALL.md](docs/INSTALL.md)** for backup paths and the full checklist.
 
 **New here?** Run the guided setup wizard (recommended for non-technical users):
 
