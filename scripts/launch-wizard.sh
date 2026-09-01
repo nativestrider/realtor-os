@@ -43,8 +43,10 @@ banner() {
   printf '%s  %s steps — about 5 minutes%s\n\n' "$DIM" "$TOTAL_STAGES" "$RESET"
   printf '%s  Welcome! This setup will help you chat with AI assistants\n' "$DIM"
   printf '  (like Claude, ChatGPT Codex, or Kimi) right in your web browser.\n\n'
+  printf '  Everything stays in your user folder — we do not change system\n'
+  printf '  Node or require administrator access (Mac, Linux, WSL).\n\n'
   printf '  We will:\n'
-  printf '    • install Node.js and Git if your computer does not have them yet\n'
+  printf '    • install Node.js in ~/.local (fnm) if needed\n'
   printf '    • make sure your computer is ready\n'
   printf '    • install the browser used for Zillow imports\n'
   printf '    • ask which AI assistants you want to use\n'
@@ -543,6 +545,18 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$ROOT/.realtor-preferences.env"
 PREFS_JSON="$ROOT/apps/web/public/realtor-preferences.json"
 
+if [[ -f "${HOME}/.local/share/realtor-os/install.env" ]]; then
+  # shellcheck source=/dev/null
+  source "${HOME}/.local/share/realtor-os/install.env"
+fi
+export REALTOR_REPO_ROOT="$ROOT"
+export REALTOR_INSTALL_DIR="${REALTOR_INSTALL_DIR:-$ROOT}"
+export REALTOR_ISOLATED="${REALTOR_ISOLATED:-1}"
+# shellcheck source=scripts/realtor-env.sh
+source "$ROOT/scripts/realtor-env.sh"
+export REALTOR_REPO_ROOT="$ROOT"
+export REALTOR_INSTALL_DIR="${REALTOR_INSTALL_DIR:-$ROOT}"
+
 TOTAL_STAGES=9
 
 cmd_exists() { command -v "$1" >/dev/null 2>&1; }
@@ -767,16 +781,18 @@ else
 fi
 
 note ""
-say "Git is used to download updates later (optional to run the app today)."
+say "Git is only needed for git clone/pull (optional)."
 if cmd_exists git; then
   ok_msg "Git is installed ($(git --version))"
+elif [[ "${REALTOR_ISOLATED:-1}" == "1" ]]; then
+  note "Isolated install: Git not required — the app already lives in this folder."
+  note "Future updates: curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash"
 else
   warn "Git isn't installed."
-  if confirm "Install Git now (recommended)"; then
+  if confirm "Install Git now (may use sudo on Linux)"; then
     install_git_with_wizard || git_manual_install_hint
   else
     note "Skipping Git — you can still run RealtorOS from this folder."
-    note "To get updates later, install Git or copy a fresh folder from someone who has the repo."
   fi
 fi
 pause "Press Enter to continue"
@@ -804,6 +820,8 @@ if ! pnpm install; then
   warn "Download failed. Check your internet connection and try again."
   exit 1
 fi
+mkdir -p "${REALTOR_HOME}/pnpm-store" "${PNPM_HOME}"
+pnpm config set store-dir "${REALTOR_HOME}/pnpm-store" 2>/dev/null || true
 printf '  %s✓ App is ready%s\n' "$GREEN" "$RESET"
 pause "Press Enter to continue"
 
@@ -978,6 +996,9 @@ fi
 # ── 8. Launch ───────────────────────────────────────────────────────────────
 stage "Opening RealtorOS"
 realtor_show_logo "$BOLD" "$DIM" "$BLUE" "$RESET"
+LAUNCHER="$(bash "$ROOT/scripts/write-launcher.sh" "$ROOT")"
+say "User-local shortcut: ${LAUNCHER}"
+note "Add ~/.local/bin to your PATH to run: realtor-os"
 say "Starting up — your browser will open in a moment…"
 cd "$ROOT"
-exec node "$ROOT/packages/cli/bin/realtor.mjs" web
+exec bash -c 'source scripts/realtor-env.sh && export REALTOR_REPO_ROOT="'"$ROOT"'" && node packages/cli/bin/realtor.mjs web'

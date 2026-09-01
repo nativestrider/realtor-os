@@ -43,13 +43,17 @@ The wizard installs **Node.js**, **Git** (optional), **pnpm**, and **Playwright 
 
 ### One command (Mac or Linux)
 
-Downloads the app to `~/RealtorOS` and runs the setup wizard (Node, Git, pnpm, Chromium, AI sign-in):
+Downloads the app to a **user-local folder** (`~/.local/share/realtor-os/app`) and runs the wizard. Does not use sudo or replace your system Node.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash
 ```
 
-Custom folder: `REALTOR_INSTALL_DIR=~/dev/RealtorOS curl -fsSL … | bash`
+After setup, start anytime with **`realtor-os`** (if `~/.local/bin` is on your PATH).
+
+**Windows:** use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and run the same command in the Ubuntu terminal.
+
+Custom folder: `REALTOR_INSTALL_DIR=~/RealtorOS curl -fsSL … | bash`
 
 **New machine or OS reinstall?** See **[docs/INSTALL.md](docs/INSTALL.md)** for backup paths and the full checklist.
 

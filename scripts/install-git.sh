@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # Install Git for RealtorOS (used by launch-wizard.sh).
+# In isolated mode (default) we do not run apt/brew/sudo — use tarball install instead.
 set -euo pipefail
 
 log() { printf '[realtor-os] %s\n' "$1"; }
 warn() { printf '[realtor-os] warning: %s\n' "$1" >&2; }
 
 main() {
+  if [[ "${REALTOR_ISOLATED:-1}" == "1" ]]; then
+    warn "Isolated install skips system Git (no sudo)."
+    warn "Updates: re-run curl …/scripts/install.sh | bash"
+    exit 1
+  fi
+
   if command -v git >/dev/null 2>&1; then
     log "Git already installed ($(git --version))"
     exit 0

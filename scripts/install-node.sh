@@ -74,7 +74,7 @@ main() {
     warn "Node $(node --version) is older than 20 — upgrading…"
   fi
 
-  if [[ "$(uname -s)" == "Darwin" ]] && command -v brew >/dev/null 2>&1; then
+  if [[ "$(uname -s)" == "Darwin" ]] && [[ "${REALTOR_ALLOW_SYSTEM_NODE:-0}" == "1" ]] && command -v brew >/dev/null 2>&1; then
     install_node_via_brew || install_node_via_fnm
   else
     if ! command -v curl >/dev/null 2>&1; then

@@ -9,9 +9,12 @@
 #
 set -euo pipefail
 
+REALTOR_HOME="${REALTOR_HOME:-${HOME}/.local/share/realtor-os}"
 REPO_URL="${REALTOR_REPO_URL:-https://github.com/nativestrider/realtor-os.git}"
-INSTALL_DIR="${REALTOR_INSTALL_DIR:-${HOME}/RealtorOS}"
+INSTALL_DIR="${REALTOR_INSTALL_DIR:-${REALTOR_HOME}/app}"
 BRANCH="${REALTOR_BRANCH:-main}"
+# Isolated install: no sudo, no Homebrew Node — everything under ~/.local and ~/.realtor-os
+export REALTOR_ISOLATED="${REALTOR_ISOLATED:-1}"
 
 log() { printf '[realtor-os] %s\n' "$1"; }
 warn() { printf '[realtor-os] warning: %s\n' "$1" >&2; }
@@ -68,6 +71,8 @@ clone_or_update() {
   if command -v git >/dev/null 2>&1; then
     log "Cloning ${REPO_URL} → ${INSTALL_DIR}"
     git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
+  elif [[ "${REALTOR_ISOLATED:-1}" == "1" ]]; then
+    fetch_without_git
   else
     if ensure_git 2>/dev/null; then
       git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
@@ -91,8 +96,10 @@ resolve_script_dir() {
 }
 
 main() {
-  log "RealtorOS installer"
-  log "Install folder: ${INSTALL_DIR}"
+  log "RealtorOS installer (isolated user environment)"
+  log "App folder:     ${INSTALL_DIR}"
+  log "Data folder:    ${REALTOR_DATA_DIR:-${HOME}/.realtor-os}"
+  log "Does not use sudo or change system Node/npm by default."
 
   if script_dir="$(resolve_script_dir)"; then
     repo_root="$(cd "${script_dir}/.." && pwd)"
@@ -113,6 +120,11 @@ main() {
 
   log "Starting setup wizard…"
   cd "$INSTALL_DIR"
+  mkdir -p "$REALTOR_HOME"
+  printf 'REALTOR_INSTALL_DIR=%s\nREALTOR_HOME=%s\nREALTOR_ISOLATED=%s\n' \
+    "$INSTALL_DIR" "$REALTOR_HOME" "$REALTOR_ISOLATED" >"${REALTOR_HOME}/install.env"
+  export REALTOR_INSTALL_DIR="$INSTALL_DIR"
+  export REALTOR_REPO_ROOT="$INSTALL_DIR"
   exec bash scripts/launch-wizard.sh
 }
 
