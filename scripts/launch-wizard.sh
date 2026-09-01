@@ -217,7 +217,7 @@ multiselect() {
   for i in "${!options[@]}"; do
     selected[i]=0
   done
-  for i in "${defaults[@]}"; do
+  for i in "${defaults[@]+"${defaults[@]}"}"; do
     if [[ "$i" =~ ^[0-9]+$ ]] && (( i >= 0 && i < ${#options[@]} )); then
       selected[i]=1
     fi
@@ -874,9 +874,14 @@ if [[ -n "$saved_agents" ]]; then
 fi
 
 SELECTED_IDXS=()
-multiselect "Choose your assistants:" SELECTED_IDXS \
-  --default "${DEFAULT_ASSISTANT_IDXS[@]}" -- \
-  "${ASSISTANT_LABELS[@]}"
+if (( ${#DEFAULT_ASSISTANT_IDXS[@]} > 0 )); then
+  multiselect "Choose your assistants:" SELECTED_IDXS \
+    --default "${DEFAULT_ASSISTANT_IDXS[@]}" -- \
+    "${ASSISTANT_LABELS[@]}"
+else
+  multiselect "Choose your assistants:" SELECTED_IDXS -- \
+    "${ASSISTANT_LABELS[@]}"
+fi
 
 USE_CLAUDE=false
 USE_CODEX=false
