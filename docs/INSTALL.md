@@ -26,11 +26,15 @@ Override app location: `REALTOR_INSTALL_DIR=~/RealtorOS curl … | bash`
 
 ### macOS, Linux, and Windows
 
-| OS | Supported install |
-|----|-------------------|
-| **macOS** | `curl … \| bash` or wizard — native Terminal |
-| **Linux** | Same |
-| **Windows** | Use **WSL2** (Ubuntu) and run the same `curl` command inside WSL. Native PowerShell is not supported yet. |
+| OS | Install command |
+|----|-----------------|
+| **macOS / Linux** | `curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh \| bash` |
+| **Windows (PC)** | Open **PowerShell** and run: `powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.ps1 \| iex"` |
+| **Windows (optional)** | [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) + the Linux `curl` command above |
+
+Windows installs to **`%LOCALAPPDATA%\realtor-os\app`** (no admin). Data stays in **`%USERPROFILE%\.realtor-os`**. Start with **`realtor-os`** in a new terminal.
+
+If **Git for Windows** is installed, the PowerShell installer also opens the full bash wizard (AI sign-in). Without Git Bash, you get a streamlined install and start with `realtor-os` or `pnpm dev`.
 
 AI CLIs (Claude, Codex, Kimi) install separately and keep their own login — RealtorOS does not bundle them.
 
@@ -324,7 +328,8 @@ Use this after a new OS install or new computer:
 | Git setup | `bash scripts/install-git.sh` | Standalone Git install (wizard calls this) |
 | Browser deps (Linux) | `pnpm run setup:browsers:deps` | Chromium launch failures |
 | Launch wizard | `bash scripts/launch-wizard.sh` | First-time or full re-setup |
-| Full install | `bash scripts/install.sh` or `curl …/install.sh \| bash` | Clone + wizard in one step |
+| Full install (Mac/Linux) | `bash scripts/install.sh` or `curl …/install.sh \| bash` | Clone + wizard |
+| Full install (Windows) | `irm …/install.ps1 \| iex` in PowerShell | User-local install |
 
 ---
 

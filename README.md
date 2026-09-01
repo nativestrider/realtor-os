@@ -51,9 +51,14 @@ curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scrip
 
 After setup, start anytime with **`realtor-os`** (if `~/.local/bin` is on your PATH).
 
-**Windows:** use [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and run the same command in the Ubuntu terminal.
+**Windows (PC):** open PowerShell:
 
-Custom folder: `REALTOR_INSTALL_DIR=~/RealtorOS curl -fsSL … | bash`
+```powershell
+powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.ps1 | iex"
+```
+
+Installs to `%LOCALAPPDATA%\realtor-os\app` — no admin. Start with `realtor-os`.  
+**macOS / Linux / WSL:** `curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash`
 
 **New machine or OS reinstall?** See **[docs/INSTALL.md](docs/INSTALL.md)** for backup paths and the full checklist.
 
