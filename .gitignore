@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.next/
+out/
+*.tsbuildinfo
+*.db
+.env
+.env.local
+.realtor-preferences.env
+apps/web/public/realtor-preferences.json
+.DS_Store
+*.log

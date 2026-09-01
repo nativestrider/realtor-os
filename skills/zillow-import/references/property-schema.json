@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RealtorOS Property",
+  "type": "object",
+  "required": ["address"],
+  "properties": {
+    "title": { "type": "string", "description": "Display title, usually the address" },
+    "address": { "type": "string" },
+    "price": { "type": "number", "description": "List price in USD" },
+    "beds": { "type": "integer" },
+    "baths": { "type": "number" },
+    "sqft": { "type": "integer", "description": "Living area square feet" },
+    "lotSqft": { "type": "integer" },
+    "yearBuilt": { "type": "integer" },
+    "propertyType": { "type": "string" },
+    "description": { "type": "string" },
+    "zpid": { "type": "string" },
+    "mls": { "type": "string" },
+    "zillowUrl": { "type": "string", "format": "uri" },
+    "coverImage": { "type": "string", "description": "Relative path e.g. images/01.jpg" },
+    "photoUrls": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri" },
+      "description": "Source URLs before download (optional, for provenance)"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "realtor-os",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "type": "module",
+  "description": "Multi-agent CLI web chat for Claude Code, Codex, and Kimi",
+  "license": "MIT",
+  "bin": {
+    "realtor": "./packages/cli/bin/realtor.mjs"
+  },
+  "scripts": {
+    "dev": "tsx scripts/dev.ts",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "setup:browsers": "node scripts/install-playwright.mjs",
+    "setup:browsers:deps": "node scripts/install-playwright.mjs --with-deps"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "playwright": "^1.51.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

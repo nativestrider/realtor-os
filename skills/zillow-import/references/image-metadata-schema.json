@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Image metadata sidecar",
+  "description": "Stored at images/.meta/{basename}.json for each file in images/",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "exterior",
+        "interior",
+        "kitchen",
+        "bathroom",
+        "bedroom",
+        "blueprint",
+        "floor_plan",
+        "other"
+      ],
+      "description": "Proposed image type. Omit role (or use unclassified only in UI) when uncertain."
+    },
+    "room": {
+      "type": "string",
+      "description": "Optional room label, e.g. primary_bedroom, living_room"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional short note, e.g. rear yard, Zillow gallery label"
+    }
+  },
+  "additionalProperties": false
+}
