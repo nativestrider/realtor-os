@@ -6,6 +6,24 @@ For day-to-day usage see [README.md](../README.md). For guided first-time setup,
 
 ---
 
+## Repository vs local data
+
+| In git (clone on each machine) | Not in git (copy manually) |
+|--------------------------------|----------------------------|
+| Source: `packages/`, `apps/`, `skills/`, `scripts/` | `~/.realtor-os/realtor.db` |
+| `docs/INSTALL.md`, `pnpm-lock.yaml` | `~/.realtor-os/properties/` (photos, `property.json`, …) |
+| | `~/.realtor-os/user-settings.json` |
+| | `~/.realtor-os/browser.json` — **re-run** `pnpm run setup:browsers` on each OS |
+
+```bash
+git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
+cd RealtorOS
+```
+
+**Cursor codebase:** https://cursor.com/codebase/nativestride/realtor-os
+
+---
+
 ## Software stack
 
 | Component | Required? | Version | Purpose | Install |
@@ -38,9 +56,11 @@ In the app Model dropdown, prefer **GPT-5.4**. The “Default” model may be at
 ### 1. Clone the repository
 
 ```bash
-git clone <your-realtor-os-repo-url> RealtorOS
+git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
 cd RealtorOS
 ```
+
+On **macOS** (e.g. MacBook Air): same steps — no Linux `DISPLAY` setup; run `pnpm run setup:browsers` once for the Mac Chromium build.
 
 ### 2. Install Node dependencies
 
@@ -161,12 +181,13 @@ tar czvf realtor-os-backup-$(date +%Y%m%d).tar.gz \
   -C /path/to/RealtorOS .realtor-preferences.env apps/web/public/realtor-preferences.json
 ```
 
-### Restore after reinstall
+### Restore after reinstall or Mac migration
 
-1. Clone repo and run `pnpm install` + `pnpm run setup:browsers`.
-2. Extract backup over `~/.realtor-os/` (or copy `properties/` and `realtor.db` + `user-settings.json`).
-3. Reinstall and sign in to AI CLIs (`claude` / `codex` / `kimi`).
-4. Start with `pnpm dev`.
+1. `git clone` (or `git pull` on an existing checkout).
+2. `pnpm install` + `pnpm run setup:browsers` on the **new** machine (do not copy Linux `browser.json` to Mac).
+3. Copy `~/.realtor-os/` from the old machine (`rsync`, AirDrop, or tarball — see backup below).
+4. Reinstall and sign in to AI CLIs (`claude` / `codex` / `kimi`).
+5. Start with `pnpm dev` or `bash scripts/launch-wizard.sh`.
 
 If you restore `server.token`, old bookmarked URLs with `#token=...` keep working. If you let the app create a new token, use the new URL printed on startup.
 
@@ -244,3 +265,16 @@ Use this after a new OS install or new computer:
 | Browser setup | `pnpm run setup:browsers` | After install; after OS reinstall |
 | Browser deps (Linux) | `pnpm run setup:browsers:deps` | Chromium launch failures |
 | Launch wizard | `bash scripts/launch-wizard.sh` | First-time or full re-setup |
+
+---
+
+## Git workflow (developers)
+
+```bash
+git pull
+pnpm install          # after lockfile changes
+pnpm run setup:browsers   # after OS change only
+pnpm dev
+```
+
+Commit code changes in the repo; never commit `~/.realtor-os/` or `.realtor-preferences.env`.

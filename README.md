@@ -4,6 +4,19 @@ Multi-agent web chat for local CLI harnesses: **Claude Code**, **Codex**, and **
 
 Inspired by [open-design](https://github.com/nexu-io/open-design) runtime adapters and the `kimi web` entry pattern.
 
+## Repository
+
+Source code is versioned in git. Application data (listings, photos, SQLite) lives in `~/.realtor-os/` and is **not** in the repo — back it up separately when moving machines.
+
+```bash
+git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
+cd RealtorOS
+```
+
+Replace `nativestride` with your Cursor namespace if you fork or use a team org. SSH clone URLs from the codebase page also work.
+
+**Move to another computer:** clone this repo, copy `~/.realtor-os/`, then follow [docs/INSTALL.md](docs/INSTALL.md).
+
 ## Quick start
 
 **New machine or OS reinstall?** See **[docs/INSTALL.md](docs/INSTALL.md)** for the full software list, backup paths, and reinstall checklist.
