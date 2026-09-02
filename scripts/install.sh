@@ -3,6 +3,8 @@
 # One-command RealtorOS install: fetch source + run launch wizard.
 #
 #   curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash
+# If that shows an old logo, GitHub's raw CDN is stale — use jsDelivr:
+#   curl -fsSL https://cdn.jsdelivr.net/gh/nativestrider/realtor-os@main/scripts/install.sh | bash
 #
 # Channels (default: stable). With curl|bash put REALTOR_CHANNEL on the bash side:
 #   curl -fsSL .../install.sh | REALTOR_CHANNEL=dev bash
@@ -79,6 +81,21 @@ export REALTOR_ISOLATED="${REALTOR_ISOLATED:-1}"
 log() { printf '[realtor-os] %s\n' "$1"; }
 warn() { printf '[realtor-os] warning: %s\n' "$1" >&2; }
 
+# raw.githubusercontent.com/main is often stale. Pin to HEAD sha, then jsDelivr.
+realtor_github_main_sha() {
+  curl -fsSL -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/repos/nativestrider/realtor-os/commits/main" 2>/dev/null \
+    | sed -n 's/^[[:space:]]*"sha": "\([0-9a-f]\{40\}\)".*/\1/p' | head -1
+}
+
+realtor_fetch_from_origin() {
+  local dest="$1" rel="$2" sha="${3:-}"
+  if [[ -n "$sha" ]] && curl -fsSL "https://raw.githubusercontent.com/nativestrider/realtor-os/${sha}/${rel}" -o "$dest" 2>/dev/null; then
+    return 0
+  fi
+  curl -fsSL "https://cdn.jsdelivr.net/gh/nativestrider/realtor-os@main/${rel}" -o "$dest" 2>/dev/null
+}
+
 install_pause() {
   printf '  %s ' "${1:-Press Enter to continue}"
   if [[ -t 0 ]]; then
@@ -125,13 +142,11 @@ show_realtor_logo() {
     logo_sh="${INSTALL_SCRIPT_DIR}/realtor-logo.sh"
   else
     local cache="${REALTOR_DATA_DIR:-$HOME/.realtor-os}/install-cache"
+    local sha=""
     mkdir -p "$cache"
-    if [[ ! -f "${cache}/realtor-logo.sh" ]]; then
-      curl -fsSL "https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/realtor-logo.sh" \
-        -o "${cache}/realtor-logo.sh" 2>/dev/null || true
-      curl -fsSL "https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/realtor-logo.art" \
-        -o "${cache}/realtor-logo.art" 2>/dev/null || true
-    fi
+    sha="$(realtor_github_main_sha || true)"
+    realtor_fetch_from_origin "${cache}/realtor-logo.sh" "scripts/realtor-logo.sh" "$sha" || true
+    realtor_fetch_from_origin "${cache}/realtor-logo.art" "scripts/realtor-logo.art" "$sha" || true
     if [[ -f "${cache}/realtor-logo.sh" ]]; then
       logo_sh="${cache}/realtor-logo.sh"
       INSTALL_SCRIPT_DIR="$cache"
