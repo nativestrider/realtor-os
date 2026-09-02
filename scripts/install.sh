@@ -4,10 +4,9 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash
 #
-# Channels (default: stable):
-#   REALTOR_CHANNEL=stable curl … | bash    # tagged release (recommended)
-#   REALTOR_CHANNEL=beta  curl … | bash     # beta branch
-#   REALTOR_CHANNEL=dev   curl … | bash     # main branch (developers)
+# Channels (default: stable). With curl|bash put REALTOR_CHANNEL on the bash side:
+#   curl -fsSL .../install.sh | REALTOR_CHANNEL=dev bash
+# Or: export REALTOR_CHANNEL=dev  then  curl ... | bash
 #   REALTOR_INSTALL_DIR="$HOME/Developer/realtor-os" curl -fsSL .../install.sh | bash
 #
 # Or download first — opens the folder picker and other prompts:
@@ -144,6 +143,10 @@ install_welcome() {
   printf '\n'
   log "Install channel: $(realtor_channel_label)"
   log "Version:         ${REALTOR_VERSION} (${REALTOR_GIT_REF})"
+  if [[ ! -t 0 ]] && [[ "${REALTOR_CHANNEL}" == "stable" ]]; then
+    log "Want dev instead? Cancel (Ctrl-C) and run:"
+    log "  curl -fsSL .../install.sh | REALTOR_CHANNEL=dev bash"
+  fi
   if [[ "${REALTOR_CHANNEL}" == "dev" ]]; then
     log "Dev channel — latest code from main; for developers and testers."
   fi

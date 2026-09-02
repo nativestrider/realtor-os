@@ -17,10 +17,10 @@
 curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash
 
 # Beta
-REALTOR_CHANNEL=beta curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | REALTOR_CHANNEL=beta bash
 
 # Dev (main)
-REALTOR_CHANNEL=dev curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | REALTOR_CHANNEL=dev bash
 ```
 
 Config lives in `scripts/realtor-channels.env` on `main` (stable pointer updated on each release).
