@@ -524,6 +524,26 @@ set_var() {
   warn "skipped GitHub variable $name — gh not ready; set it later"
 }
 
+ensure_playwright_browser() {
+  local manifest="${REALTOR_DATA_DIR:-$HOME/.realtor-os}/browser.json"
+  if [[ -f "$manifest" ]]; then
+    return 0
+  fi
+  if [[ "${REALTOR_SKIP_BROWSER_INSTALL:-}" == "1" ]]; then
+    SKIPPED+=("Playwright browser — run later: pnpm run setup:browsers")
+    return 1
+  fi
+  step "Downloading Chromium for Zillow (~200 MB, one time)…"
+  if pnpm run setup:browsers; then
+    ok_msg "Browser ready for Zillow import"
+    return 0
+  fi
+  warn "Browser install failed. You can retry later with: pnpm run setup:browsers"
+  note "On Linux you may also need: pnpm run setup:browsers:deps"
+  SKIPPED+=("Playwright browser — run later: pnpm run setup:browsers")
+  return 1
+}
+
 finish() {
   _clear
   printf '\n%s%s  All done!%s\n' "$BOLD" "$GREEN" "$RESET"
@@ -830,23 +850,11 @@ stage "Browser for Zillow imports"
 say "To import or verify listings from Zillow, agents open a local Chrome window"
 say "(Playwright Chromium). This is separate from the RealtorOS web app."
 note ""
-BROWSER_MANIFEST="${REALTOR_DATA_DIR:-$HOME/.realtor-os}/browser.json"
-if [[ -f "$BROWSER_MANIFEST" ]]; then
+if [[ -f "${REALTOR_DATA_DIR:-$HOME/.realtor-os}/browser.json" ]]; then
   ok_msg "Playwright Chromium is already installed"
 else
-  say "We recommend installing it now (~200 MB download, one time)."
-  if confirm "Install Playwright Chromium now"; then
-    step "Downloading Chromium…"
-    if pnpm run setup:browsers; then
-      ok_msg "Browser ready for Zillow import"
-    else
-      warn "Browser install failed. You can retry later with: pnpm run setup:browsers"
-      note "On Linux you may also need: pnpm run setup:browsers:deps"
-    fi
-  else
-    SKIPPED+=("Playwright browser — run later: pnpm run setup:browsers")
-    note "Zillow import/verify will not work until you run: pnpm run setup:browsers"
-  fi
+  say "Installing it now — about 200 MB, one time."
+  ensure_playwright_browser || true
 fi
 pause "Press Enter to continue"
 
@@ -981,6 +989,9 @@ pause "Press Enter to continue"
 
 # ── 7. Ready to launch ──────────────────────────────────────────────────────
 stage "Ready to open the chat"
+if [[ ! -f "${REALTOR_DATA_DIR:-$HOME/.realtor-os}/browser.json" ]]; then
+  ensure_playwright_browser || true
+fi
 say "Everything is set! Here's what you picked:"
 note ""
 $USE_CLAUDE && note "  Claude — model: ${MODEL_CLAUDE:-default}"
