@@ -117,15 +117,31 @@ install_dir_is_empty() {
 show_realtor_logo() {
   local root="${1:-${REALTOR_REPO_ROOT:-}}"
   local logo_sh=""
+
   if [[ -n "$root" && -f "${root}/scripts/realtor-logo.sh" ]]; then
     logo_sh="${root}/scripts/realtor-logo.sh"
+    export REALTOR_REPO_ROOT="$root"
   elif [[ -n "${INSTALL_SCRIPT_DIR:-}" && -f "${INSTALL_SCRIPT_DIR}/realtor-logo.sh" ]]; then
     logo_sh="${INSTALL_SCRIPT_DIR}/realtor-logo.sh"
-    root="$(cd "${INSTALL_SCRIPT_DIR}/.." && pwd)"
   else
+    local cache="${REALTOR_DATA_DIR:-$HOME/.realtor-os}/install-cache"
+    mkdir -p "$cache"
+    if [[ ! -f "${cache}/realtor-logo.sh" ]]; then
+      curl -fsSL "https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/realtor-logo.sh" \
+        -o "${cache}/realtor-logo.sh" 2>/dev/null || true
+      curl -fsSL "https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/realtor-logo.art" \
+        -o "${cache}/realtor-logo.art" 2>/dev/null || true
+    fi
+    if [[ -f "${cache}/realtor-logo.sh" ]]; then
+      logo_sh="${cache}/realtor-logo.sh"
+      INSTALL_SCRIPT_DIR="$cache"
+    fi
+  fi
+
+  if [[ -z "$logo_sh" ]]; then
     return 1
   fi
-  export REALTOR_REPO_ROOT="$root"
+
   # shellcheck source=/dev/null
   source "$logo_sh"
   realtor_show_logo "" "" "" ""
@@ -134,12 +150,8 @@ show_realtor_logo() {
 
 install_welcome() {
   printf '\n'
-  if ! show_realtor_logo ""; then
-    log "════════════════════════════════════════════════════════"
-    log "  RealtorOS — Installation"
-    log "════════════════════════════════════════════════════════"
-    printf '\n'
-  fi
+  show_realtor_logo "" || true
+  printf '\n'
   log "Welcome! We will install RealtorOS on your Mac step by step."
   log "You do not need programming knowledge — just read each screen"
   log "and press Enter when you are ready. Nothing happens until then."

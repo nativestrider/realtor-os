@@ -6,19 +6,53 @@ realtor_logo_path() {
     printf '%s\n' "${REALTOR_REPO_ROOT}/scripts/realtor-logo.art"
     return
   fi
-  printf '%s\n' "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/realtor-logo.art"
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "${script_dir}/realtor-logo.art" ]]; then
+    printf '%s\n' "${script_dir}/realtor-logo.art"
+    return
+  fi
+  printf '%s\n' "${script_dir}/realtor-logo.art"
+}
+
+realtor_logo_print_lines() {
+  local bold="${1-}" blue="${3-}" reset="${4-}"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    printf '%s%s%s\n' "$bold$blue" "$line" "$reset"
+  done
+}
+
+realtor_show_logo_builtin() {
+  realtor_logo_print_lines "$@" <<'EOF'
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃                                                              ┃
+┃                           /\                                 ┃
+┃                          /  \                                ┃
+┃                         /____\                               ┃
+┃                         |    |                               ┃
+┃                         | [] |                               ┃
+┃                         |____|                               ┃
+┃                                                              ┃
+┃         ____            _       ____   ___  ____             ┃
+┃        |  _ \ ___  ___| |_ ___|  _ \ / _ \|  _ \            ┃
+┃        | |_) / _ \/ __| __/ _ \ | | | | | | |_) |           ┃
+┃        |  _ <  __/\__ \ ||  __/ |_| | |_| |  _ <            ┃
+┃        |_| \_\___||___/\__\___|____/ \___/|_| \_\            ┃
+┃                                                              ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+EOF
 }
 
 realtor_show_logo() {
   local logo_file
   logo_file="$(realtor_logo_path)"
-  [[ -f "$logo_file" ]] || return 0
-
   local bold="${1-}" dim="${2-}" blue="${3-}" reset="${4-}"
 
   printf '\n'
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    printf '%s%s%s\n' "$bold$blue" "$line" "$reset"
-  done < "$logo_file"
+  if [[ -f "$logo_file" ]]; then
+    realtor_logo_print_lines "$bold" "$dim" "$blue" "$reset" <"$logo_file"
+  else
+    realtor_show_logo_builtin "$bold" "$dim" "$blue" "$reset"
+  fi
   printf '\n'
 }
