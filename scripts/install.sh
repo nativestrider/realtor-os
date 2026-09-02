@@ -114,12 +114,33 @@ install_dir_is_empty() {
   [[ -z "$(ls -A "$1" 2>/dev/null)" ]]
 }
 
+show_realtor_logo() {
+  local root="${1:-${REALTOR_REPO_ROOT:-}}"
+  local logo_sh=""
+  if [[ -n "$root" && -f "${root}/scripts/realtor-logo.sh" ]]; then
+    logo_sh="${root}/scripts/realtor-logo.sh"
+  elif [[ -n "${INSTALL_SCRIPT_DIR:-}" && -f "${INSTALL_SCRIPT_DIR}/realtor-logo.sh" ]]; then
+    logo_sh="${INSTALL_SCRIPT_DIR}/realtor-logo.sh"
+    root="$(cd "${INSTALL_SCRIPT_DIR}/.." && pwd)"
+  else
+    return 0
+  fi
+  export REALTOR_REPO_ROOT="$root"
+  # shellcheck source=/dev/null
+  source "$logo_sh"
+  realtor_show_logo "" "" "" ""
+}
+
 install_welcome() {
   printf '\n'
-  log "════════════════════════════════════════════════════════"
-  log "  RealtorOS — Installation"
-  log "════════════════════════════════════════════════════════"
-  printf '\n'
+  if show_realtor_logo ""; then
+    :
+  else
+    log "════════════════════════════════════════════════════════"
+    log "  RealtorOS — Installation"
+    log "════════════════════════════════════════════════════════"
+    printf '\n'
+  fi
   log "Welcome! We will install RealtorOS on your Mac step by step."
   log "You do not need programming knowledge — just read each screen"
   log "and press Enter when you are ready. Nothing happens until then."
@@ -396,6 +417,7 @@ main() {
 
   printf '\n'
   log "STEP 3 of 3 — Setup wizard"
+  show_realtor_logo "$INSTALL_DIR" || true
   log "NEXT: A guided setup runs in this Terminal window."
   log "Each step is explained before anything happens on your Mac."
   install_pause "Press Enter to start the setup wizard"

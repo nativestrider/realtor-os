@@ -38,8 +38,12 @@ _clear() {
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/realtor-logo.sh"
 
 banner() {
+  local title="${1:-}"
   _clear
   realtor_show_logo "$BOLD" "$DIM" "$BLUE" "$RESET"
+  if [[ -n "$title" ]]; then
+    printf '%s  %s%s\n' "$BOLD" "$title" "$RESET"
+  fi
   printf '%s  %s steps — about 5 minutes%s\n\n' "$DIM" "$TOTAL_STAGES" "$RESET"
   printf '%s  Welcome! This setup will help you chat with AI assistants\n' "$DIM"
   printf '  (like Claude, ChatGPT Codex, or Kimi) right in your web browser.\n\n'

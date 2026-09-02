@@ -2,6 +2,10 @@
 # Realtor OS retro terminal logo — source this file, then call realtor_show_logo
 
 realtor_logo_path() {
+  if [[ -n "${REALTOR_REPO_ROOT:-}" && -f "${REALTOR_REPO_ROOT}/scripts/realtor-logo.art" ]]; then
+    printf '%s\n' "${REALTOR_REPO_ROOT}/scripts/realtor-logo.art"
+    return
+  fi
   printf '%s\n' "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/realtor-logo.art"
 }
 
