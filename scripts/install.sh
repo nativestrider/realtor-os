@@ -23,6 +23,45 @@ export REALTOR_ISOLATED="${REALTOR_ISOLATED:-1}"
 log() { printf '[realtor-os] %s\n' "$1"; }
 warn() { printf '[realtor-os] warning: %s\n' "$1" >&2; }
 
+install_pause() {
+  printf '  %s ' "${1:-Press Enter to continue}"
+  if [[ -t 0 ]]; then
+    read -r _ || true
+  elif [[ -r /dev/tty ]]; then
+    read -r _ </dev/tty || true
+  fi
+}
+
+install_welcome() {
+  printf '\n'
+  log "════════════════════════════════════════════════════════"
+  log "  RealtorOS — Installation"
+  log "════════════════════════════════════════════════════════"
+  printf '\n'
+  log "Welcome! We will install RealtorOS on your Mac step by step."
+  log "You do not need programming knowledge — just read each screen"
+  log "and press Enter when you are ready. Nothing happens until then."
+  printf '\n'
+  log "Here is the full plan:"
+  log "  1. Choose where to put the app (Finder will open)"
+  log "  2. Download the app files (about 1–2 minutes)"
+  log "  3. Setup wizard (~5 minutes):"
+  log "       • Node.js (installed for you if missing)"
+  log "       • App dependencies"
+  log "       • Browser for Zillow imports (~200 MB)"
+  log "       • Your AI assistants (Claude, ChatGPT, Kimi)"
+  log "       • Optional Desktop icon"
+  log "       • Open RealtorOS in your web browser"
+  printf '\n'
+  log "Two folders — this is normal:"
+  log "  App:   ~/RealtorOS (or the folder you choose)"
+  log "  Data:  ~/.realtor-os (listings, photos, settings)"
+  printf '\n'
+  log "We never ask for your Mac password and never change system Node."
+  printf '\n'
+  install_pause "Press Enter when you have read this and are ready to start"
+}
+
 ensure_git() {
   if command -v git >/dev/null 2>&1; then
     return 0
@@ -136,8 +175,11 @@ pick_install_dir() {
 
   if [[ -t 0 ]]; then
     printf '\n'
-    log "Choose where to install the RealtorOS app folder."
-    log "Your listings and settings always go in ~/.realtor-os (separate)."
+    log "STEP 1 of 3 — Choose install folder"
+    log "NEXT: A Finder window will open."
+    log "Pick where the RealtorOS folder should live (Home or Documents is fine)."
+    log "Your listings always go in ~/.realtor-os — separate from the app."
+    install_pause "Press Enter to open Finder"
     if [[ -n "$picker" ]]; then
       INSTALL_DIR="$(bash "$picker" "$default")"
     else
@@ -151,7 +193,10 @@ pick_install_dir() {
       fi
     fi
   else
-    log "Download install — does not use your current folder ($(pwd))."
+    log "STEP 1 of 3 — Choose install folder"
+    log "NEXT: A Finder window will open (if you cancel, we use ~/RealtorOS)."
+    log "This install does not use your current Terminal folder: $(pwd)"
+    install_pause "Press Enter to open Finder"
     if [[ -n "$picker" ]] && picked="$(bash "$picker" --gui-only "$default" 2>/dev/null || true)" && [[ -n "$picked" ]]; then
       INSTALL_DIR="$picked"
     else
@@ -168,6 +213,7 @@ pick_install_dir() {
 }
 
 main() {
+  install_welcome
   log "RealtorOS installer (isolated user environment)"
   log "Data folder:    ${REALTOR_DATA_DIR:-${HOME}/.realtor-os}"
   log "Does not use sudo or change system Node/npm by default."
@@ -185,6 +231,13 @@ main() {
   pick_install_dir
   log "App folder:     ${INSTALL_DIR}"
 
+  printf '\n'
+  log "STEP 2 of 3 — Download the app"
+  log "NEXT: We download RealtorOS into:"
+  log "  ${INSTALL_DIR}"
+  log "This usually takes 1–2 minutes. You will see download progress below."
+  install_pause "Press Enter to start the download"
+
   clone_or_update
 
   if [[ ! -f "${INSTALL_DIR}/scripts/launch-wizard.sh" ]]; then
@@ -192,6 +245,11 @@ main() {
     exit 1
   fi
 
+  printf '\n'
+  log "STEP 3 of 3 — Setup wizard"
+  log "NEXT: A guided setup runs in this Terminal window."
+  log "Each step is explained before anything happens on your Mac."
+  install_pause "Press Enter to start the setup wizard"
   log "Starting setup wizard…"
   cd "$INSTALL_DIR"
   mkdir -p "$REALTOR_DATA_DIR"

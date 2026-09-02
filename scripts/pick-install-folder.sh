@@ -32,6 +32,7 @@ gui_pick() {
   local picked=""
 
   if [[ "$(uname -s)" == "Darwin" ]] && command -v osascript >/dev/null 2>&1; then
+    printf '[realtor-os] Opening Finder — choose where to install RealtorOS…\n' >&2
     picked="$(osascript 2>/dev/null <<EOF || true
 set defaultPath to POSIX file "${default_parent}"
 try
@@ -43,6 +44,7 @@ end try
 EOF
 )"
   elif [[ -n "${DISPLAY:-}" ]] && command -v zenity >/dev/null 2>&1; then
+    printf '[realtor-os] Opening folder picker…\n' >&2
     picked="$(zenity --file-selection --directory \
       --title="Install RealtorOS" \
       --text="Choose where to install RealtorOS. A \"${default_name}\" folder will be created here unless you select it directly." \

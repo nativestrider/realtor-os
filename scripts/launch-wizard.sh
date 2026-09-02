@@ -45,13 +45,18 @@ banner() {
   printf '  (like Claude, ChatGPT Codex, or Kimi) right in your web browser.\n\n'
   printf '  Everything stays in your user folder — we do not change system\n'
   printf '  Node or require administrator access (Mac, Linux, WSL).\n\n'
+  printf '  We explain each step BEFORE it happens. When we ask you to press\n'
+  printf '  Enter, read the message first — nothing runs until you confirm.\n\n'
   printf '  We will:\n'
-  printf '    • install Node.js in ~/.local (fnm) if needed\n'
-  printf '    • make sure your computer is ready\n'
-  printf '    • install the browser used for Zillow imports\n'
-  printf '    • ask which AI assistants you want to use\n'
-  printf '    • check that you are signed in to them\n'
-  printf '    • open the chat app for you\n\n'
+  printf '    1. Check Node.js (install it for you if missing)\n'
+  printf '    2. Download the app files (about 1 minute, one time)\n'
+  printf '    3. Download a browser for Zillow imports (~200 MB, one time)\n'
+  printf '    4. Ask which AI assistants you use\n'
+  printf '    5. Check that you are signed in to them\n'
+  printf '    6. Optionally put an icon on your Desktop\n'
+  printf '    7. Open RealtorOS in your web browser\n\n'
+  printf '  Keep this Terminal window open while you chat. When you are done,\n'
+  printf '  come back here and press Ctrl-C to close the app.\n\n'
   printf '  You can stop anytime (Ctrl-C) and come back later — we remember\n'
   printf '  your choices.%s\n' "$RESET"
   note "Full software list & reinstall guide: docs/INSTALL.md"
@@ -90,13 +95,21 @@ open_url() {
 
 pause() {
   printf '  %s%s%s ' "$DIM" "${1:-Press Enter to continue}" "$RESET"
-  read -r _ || true
+  if [[ -t 0 ]]; then
+    read -r _ || true
+  elif [[ -r /dev/tty ]]; then
+    read -r _ </dev/tty || true
+  fi
 }
 
 confirm() {
   local reply=""
   printf '  %s? %s [y/N] ' "$YELLOW" "$1"
-  read -r reply || true
+  if [[ -t 0 ]]; then
+    read -r reply || true
+  elif [[ -r /dev/tty ]]; then
+    read -r reply </dev/tty || true
+  fi
   [[ "$reply" =~ ^[Yy] ]]
 }
 
@@ -775,9 +788,11 @@ banner "RealtorOS — let's get you chatting"
 
 # ── 1. Node.js + Git ────────────────────────────────────────────────────────
 stage "Is your computer ready?"
+say "NEXT: We check whether Node.js is installed."
+say "Node.js runs the app on your Mac — like an engine under the hood."
+say "If it is missing, we install it for you (no admin password needed)."
+note ""
 activate_fnm_env
-say "RealtorOS needs Node.js to run."
-say "Let's check — and install it for you if it's missing."
 if cmd_exists node; then
   NODE_MAJOR="$(node_major_version)"
   say "Node.js is present ($(node --version))."
@@ -819,9 +834,11 @@ pause "Press Enter to continue"
 
 # ── 2. pnpm + project dependencies ────────────────────────────────────────
 stage "Getting the app ready"
+say "NEXT: We download the RealtorOS app files to your computer."
+say "This only happens once and usually takes about one minute."
+say "You will see progress lines scroll by — that is normal."
+note ""
 cd "$ROOT"
-say "Now we'll download the RealtorOS app files to your computer."
-say "This only happens once — and it may take a minute."
 if ! cmd_exists pnpm; then
   step "Setting up the download tool (one moment)..."
   if cmd_exists corepack; then
@@ -847,21 +864,24 @@ pause "Press Enter to continue"
 
 # ── 2b. Playwright Chromium (Zillow import) ───────────────────────────────
 stage "Browser for Zillow imports"
-say "To import or verify listings from Zillow, agents open a local Chrome window"
-say "(Playwright Chromium). This is separate from the RealtorOS web app."
+say "NEXT: We download a small Chrome browser used only for Zillow."
+say "It is about 200 MB and installs once. Nothing opens on screen yet —"
+say "agents only use it when you import or verify a listing."
+say "This is separate from the RealtorOS page in your normal browser."
 note ""
 if [[ -f "${REALTOR_DATA_DIR:-$HOME/.realtor-os}/browser.json" ]]; then
   ok_msg "Playwright Chromium is already installed"
 else
-  say "Installing it now — about 200 MB, one time."
+  pause "Press Enter to start the browser download"
   ensure_playwright_browser || true
 fi
 pause "Press Enter to continue"
 
 # ── 3. Choose assistants ──────────────────────────────────────────────────
 stage "Which AI assistants do you use?"
-say "RealtorOS lets you chat with AI tools you already have on your computer."
-say "Pick one or more — you need at least one."
+say "NEXT: Tell us which AI tools you already have on this Mac."
+say "RealtorOS connects to assistants you installed separately"
+say "(Claude Code, OpenAI Codex, or Kimi). Pick at least one."
 note ""
 
 ASSISTANT_LABELS=("Claude (by Anthropic)" "Codex (by OpenAI / ChatGPT)" "Kimi (by Moonshot)")
@@ -999,18 +1019,18 @@ $USE_CODEX && note "  Codex — model: ${MODEL_CODEX:-default}"
 $USE_KIMI && note "  Kimi — model: ${MODEL_KIMI:-default}"
 note ""
 say "Desktop shortcut"
-say "We can place a RealtorOS icon on your Desktop so you can open the app"
-say "with a double-click — the same way you open Mail or Safari."
-say "A Terminal window will open briefly while the app starts; keep it open while you chat."
+say "NEXT: We can add a RealtorOS icon to your Desktop."
+say "Double-click it later to open the app — like Mail or Safari."
+say "A Terminal window opens briefly while the app starts; keep it open."
 note ""
 CREATE_DESKTOP_SHORTCUT=false
 if confirm "Add RealtorOS to your Desktop"; then
   CREATE_DESKTOP_SHORTCUT=true
 fi
 note ""
-say "We'll open the chat in your browser next."
-say "Keep the Terminal window open while you chat."
-say "When you're done, come back here and press Ctrl-C to close the app."
+say "NEXT: We will open RealtorOS in your web browser."
+say "Keep this Terminal window open while you chat."
+say "When you are done, come back here and press Ctrl-C to close the app."
 
 if ! confirm "Open RealtorOS now"; then
   say "No rush! Whenever you're ready, just run:"
@@ -1025,6 +1045,7 @@ realtor_show_logo "$BOLD" "$DIM" "$BLUE" "$RESET"
 LAUNCHER="$(bash "$ROOT/scripts/write-launcher.sh" "$ROOT")"
 note "Terminal command: realtor-os (if ~/.local/bin is on your PATH)"
 if $CREATE_DESKTOP_SHORTCUT; then
+  say "NEXT: Creating the Desktop icon…"
   if DESKTOP_SHORTCUT="$(bash "$ROOT/scripts/write-desktop-shortcut.sh" "$ROOT" 2>/dev/null)"; then
     ok_msg "Added to Desktop: $(basename "$DESKTOP_SHORTCUT")"
   else
@@ -1032,5 +1053,6 @@ if $CREATE_DESKTOP_SHORTCUT; then
   fi
 fi
 say "Starting up — your browser will open in a moment…"
+say "(If nothing opens, visit the address shown below.)"
 cd "$ROOT"
 exec bash -c 'source scripts/realtor-env.sh && export REALTOR_REPO_ROOT="'"$ROOT"'" && node packages/cli/bin/realtor.mjs web'
