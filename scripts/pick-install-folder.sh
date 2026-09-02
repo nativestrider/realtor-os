@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 # Graphical folder picker for install location (Mac Finder, Linux zenity/kdialog).
 # Prints the chosen install directory path to stdout.
+#
+#   bash pick-install-folder.sh [default_install_dir]
+#   bash pick-install-folder.sh --gui-only [default_install_dir]   # GUI only; exit 1 if cancelled
 set -euo pipefail
+
+gui_only=false
+if [[ "${1:-}" == "--gui-only" ]]; then
+  gui_only=true
+  shift
+fi
 
 default="${1:-${HOME}/RealtorOS}"
 default="${default/#\~/$HOME}"
@@ -54,7 +63,19 @@ EOF
   return 0
 }
 
+if $gui_only; then
+  if picked="$(gui_pick)"; then
+    printf '%s\n' "$picked"
+    exit 0
+  fi
+  exit 1
+fi
+
 if [[ ! -t 0 ]]; then
+  if picked="$(gui_pick)"; then
+    printf '%s\n' "$picked"
+    exit 0
+  fi
   printf '%s\n' "$default"
   exit 0
 fi

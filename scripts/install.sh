@@ -4,7 +4,11 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash
 #
-# Or from an existing checkout:
+# Install to a specific folder (curl pipe cannot read your keyboard):
+#   REALTOR_INSTALL_DIR="$HOME/Developer/realtor-os" curl -fsSL .../install.sh | bash
+#
+# Or download first — opens the folder picker and other prompts:
+#   curl -fsSL .../install.sh -o /tmp/realtor-install.sh && bash /tmp/realtor-install.sh
 #   bash scripts/install.sh
 #
 set -euo pipefail
@@ -95,42 +99,76 @@ resolve_script_dir() {
   return 1
 }
 
+resolve_picker_script() {
+  local script_dir="" picker="" tmp_picker=""
+  if script_dir="$(resolve_script_dir 2>/dev/null)"; then
+    picker="${script_dir}/pick-install-folder.sh"
+    if [[ -f "$picker" ]]; then
+      printf '%s' "$picker"
+      return 0
+    fi
+  fi
+  tmp_picker="$(mktemp)"
+  if curl -fsSL "https://raw.githubusercontent.com/nativestrider/realtor-os/${BRANCH}/scripts/pick-install-folder.sh" -o "$tmp_picker" 2>/dev/null; then
+    chmod +x "$tmp_picker"
+    printf '%s' "$tmp_picker"
+    return 0
+  fi
+  rm -f "$tmp_picker"
+  return 1
+}
+
 pick_install_dir() {
   if [[ -n "${REALTOR_INSTALL_DIR:-}" ]]; then
     INSTALL_DIR="$REALTOR_INSTALL_DIR"
+    log "Install folder (REALTOR_INSTALL_DIR): ${INSTALL_DIR}"
     return
   fi
-  if [[ ! -t 0 ]]; then
-    INSTALL_DIR="${HOME}/RealtorOS"
-    return
-  fi
+
   local default="${HOME}/RealtorOS"
   local picker=""
-  printf '\n'
-  log "Choose where to install the RealtorOS app folder."
-  log "Your listings and settings always go in ~/.realtor-os (separate)."
-  if script_dir="$(resolve_script_dir 2>/dev/null)"; then
-    picker="${script_dir}/pick-install-folder.sh"
-  fi
-  if [[ -n "$picker" ]] && [[ -f "$picker" ]]; then
-    INSTALL_DIR="$(bash "$picker" "$default")"
+
+  if picker="$(resolve_picker_script 2>/dev/null || true)" && [[ -n "$picker" ]] && [[ -f "$picker" ]]; then
+    :
   else
-    printf '  Install folder [%s]: ' "$default"
-    local reply=""
-    read -r reply || true
-    if [[ -z "$reply" ]]; then
-      INSTALL_DIR="$default"
+    picker=""
+  fi
+
+  if [[ -t 0 ]]; then
+    printf '\n'
+    log "Choose where to install the RealtorOS app folder."
+    log "Your listings and settings always go in ~/.realtor-os (separate)."
+    if [[ -n "$picker" ]]; then
+      INSTALL_DIR="$(bash "$picker" "$default")"
     else
-      INSTALL_DIR="${reply/#\~/$HOME}"
+      printf '  Install folder [%s]: ' "$default"
+      local reply=""
+      read -r reply || true
+      if [[ -z "$reply" ]]; then
+        INSTALL_DIR="$default"
+      else
+        INSTALL_DIR="${reply/#\~/$HOME}"
+      fi
+    fi
+  else
+    log "Download install — does not use your current folder ($(pwd))."
+    if [[ -n "$picker" ]] && picked="$(bash "$picker" --gui-only "$default" 2>/dev/null || true)" && [[ -n "$picked" ]]; then
+      INSTALL_DIR="$picked"
+    else
+      INSTALL_DIR="$default"
+      log "Will install to: ${INSTALL_DIR} (default)."
+      log "Another folder? Either:"
+      log "  REALTOR_INSTALL_DIR=\"/path/you/want\" curl -fsSL .../install.sh | bash"
+      log "  curl -fsSL .../install.sh -o /tmp/realtor-install.sh && bash /tmp/realtor-install.sh"
     fi
   fi
+
   log "Will install to: ${INSTALL_DIR}"
   export REALTOR_INSTALL_DIR="$INSTALL_DIR"
 }
 
 main() {
   log "RealtorOS installer (isolated user environment)"
-  log "App folder:     ${INSTALL_DIR}"
   log "Data folder:    ${REALTOR_DATA_DIR:-${HOME}/.realtor-os}"
   log "Does not use sudo or change system Node/npm by default."
 
@@ -145,6 +183,7 @@ main() {
   fi
 
   pick_install_dir
+  log "App folder:     ${INSTALL_DIR}"
 
   clone_or_update
 
