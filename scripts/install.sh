@@ -123,19 +123,18 @@ show_realtor_logo() {
     logo_sh="${INSTALL_SCRIPT_DIR}/realtor-logo.sh"
     root="$(cd "${INSTALL_SCRIPT_DIR}/.." && pwd)"
   else
-    return 0
+    return 1
   fi
   export REALTOR_REPO_ROOT="$root"
   # shellcheck source=/dev/null
   source "$logo_sh"
   realtor_show_logo "" "" "" ""
+  return 0
 }
 
 install_welcome() {
   printf '\n'
-  if show_realtor_logo ""; then
-    :
-  else
+  if ! show_realtor_logo ""; then
     log "════════════════════════════════════════════════════════"
     log "  RealtorOS — Installation"
     log "════════════════════════════════════════════════════════"
