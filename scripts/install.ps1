@@ -115,6 +115,16 @@ cd /d "$InstallDir"
 node packages\cli\bin\realtor.mjs web %*
 "@ | Set-Content -Path $cmdPath -Encoding ASCII
     Write-Log "Shortcut: $cmdPath"
+    $script:LauncherCmdPath = $cmdPath
+}
+
+function Write-DesktopShortcut {
+    if (-not $script:LauncherCmdPath) { return }
+    $desktop = [Environment]::GetFolderPath('Desktop')
+    if (-not (Test-Path $desktop)) { return }
+    $dest = Join-Path $desktop 'RealtorOS.cmd'
+    Copy-Item -Path $script:LauncherCmdPath -Destination $dest -Force
+    Write-Log "Desktop shortcut: $dest"
 }
 
 function Try-GitBashWizard {
@@ -169,6 +179,7 @@ Ensure-Source
 
 Install-Dependencies
 Write-Launcher
+Write-DesktopShortcut
 
 if (-not (Try-GitBashWizard)) {
     Print-NextSteps
