@@ -5,12 +5,12 @@
 # Source from scripts or the ~/.local/bin/realtor-os launcher:
 #   source /path/to/realtor-os/scripts/realtor-env.sh
 #
-export REALTOR_HOME="${REALTOR_HOME:-${HOME}/.local/share/realtor-os}"
 export REALTOR_DATA_DIR="${REALTOR_DATA_DIR:-${HOME}/.realtor-os}"
-export REALTOR_INSTALL_DIR="${REALTOR_INSTALL_DIR:-${REALTOR_HOME}/app}"
+# App folder the user picks (default ~/RealtorOS). Support tooling stays under REALTOR_DATA_DIR.
+export REALTOR_INSTALL_DIR="${REALTOR_INSTALL_DIR:-${HOME}/RealtorOS}"
 export REALTOR_REPO_ROOT="${REALTOR_REPO_ROOT:-${REALTOR_INSTALL_DIR}}"
-export FNM_DIR="${FNM_DIR:-${HOME}/.local/share/fnm}"
-export PNPM_HOME="${PNPM_HOME:-${REALTOR_HOME}/pnpm}"
+export FNM_DIR="${FNM_DIR:-${REALTOR_DATA_DIR}/fnm}"
+export PNPM_HOME="${PNPM_HOME:-${REALTOR_DATA_DIR}/pnpm}"
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-${HOME}/.cache/ms-playwright}"
 
 # fnm-managed Node + project pnpm shim, then user bin (realtor-os launcher)
@@ -21,8 +21,8 @@ if [[ -x "${FNM_DIR}/fnm" ]]; then
   eval "$("${FNM_DIR}/fnm" env)"
 fi
 
-# pnpm store stays under REALTOR_HOME (not global ~/.local/share/pnpm)
-export npm_config_store_dir="${npm_config_store_dir:-${REALTOR_HOME}/pnpm-store}"
+# pnpm store stays with app data (not global ~/.local/share/pnpm)
+export npm_config_store_dir="${npm_config_store_dir:-${REALTOR_DATA_DIR}/pnpm-store}"
 
 realtor_env_describe() {
   printf 'RealtorOS paths (user-local only):\n'

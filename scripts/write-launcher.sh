@@ -9,7 +9,7 @@ mkdir -p "${HOME}/.local/bin"
 cat >"$launcher" <<EOF
 #!/usr/bin/env bash
 export REALTOR_INSTALL_DIR="${install_dir}"
-export REALTOR_HOME="\${REALTOR_HOME:-${HOME}/.local/share/realtor-os}"
+export REALTOR_DATA_DIR="${REALTOR_DATA_DIR:-${HOME}/.realtor-os}"
 # shellcheck disable=SC1091
 source "\${REALTOR_INSTALL_DIR}/scripts/realtor-env.sh"
 cd "\${REALTOR_INSTALL_DIR}"

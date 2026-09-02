@@ -9,9 +9,9 @@
 #
 set -euo pipefail
 
-REALTOR_HOME="${REALTOR_HOME:-${HOME}/.local/share/realtor-os}"
+REALTOR_DATA_DIR="${REALTOR_DATA_DIR:-${HOME}/.realtor-os}"
 REPO_URL="${REALTOR_REPO_URL:-https://github.com/nativestrider/realtor-os.git}"
-INSTALL_DIR="${REALTOR_INSTALL_DIR:-${REALTOR_HOME}/app}"
+INSTALL_DIR="${REALTOR_INSTALL_DIR:-${HOME}/RealtorOS}"
 BRANCH="${REALTOR_BRANCH:-main}"
 # Isolated install: no sudo, no Homebrew Node — everything under ~/.local and ~/.realtor-os
 export REALTOR_ISOLATED="${REALTOR_ISOLATED:-1}"
@@ -95,6 +95,30 @@ resolve_script_dir() {
   return 1
 }
 
+pick_install_dir() {
+  if [[ -n "${REALTOR_INSTALL_DIR:-}" ]]; then
+    INSTALL_DIR="$REALTOR_INSTALL_DIR"
+    return
+  fi
+  if [[ ! -t 0 ]]; then
+    INSTALL_DIR="${HOME}/RealtorOS"
+    return
+  fi
+  local default="${HOME}/RealtorOS"
+  printf '\n'
+  log "Choose where to install the RealtorOS app folder."
+  log "Your listings and settings always go in ~/.realtor-os (separate)."
+  printf '  Install folder [%s]: ' "$default"
+  local reply=""
+  read -r reply || true
+  if [[ -z "$reply" ]]; then
+    INSTALL_DIR="$default"
+  else
+    INSTALL_DIR="${reply/#\~/$HOME}"
+  fi
+  export REALTOR_INSTALL_DIR="$INSTALL_DIR"
+}
+
 main() {
   log "RealtorOS installer (isolated user environment)"
   log "App folder:     ${INSTALL_DIR}"
@@ -111,6 +135,8 @@ main() {
     REALTOR_INSTALL_SCRIPT_DIR="$script_dir"
   fi
 
+  pick_install_dir
+
   clone_or_update
 
   if [[ ! -f "${INSTALL_DIR}/scripts/launch-wizard.sh" ]]; then
@@ -120,9 +146,9 @@ main() {
 
   log "Starting setup wizard…"
   cd "$INSTALL_DIR"
-  mkdir -p "$REALTOR_HOME"
-  printf 'REALTOR_INSTALL_DIR=%s\nREALTOR_HOME=%s\nREALTOR_ISOLATED=%s\n' \
-    "$INSTALL_DIR" "$REALTOR_HOME" "$REALTOR_ISOLATED" >"${REALTOR_HOME}/install.env"
+  mkdir -p "$REALTOR_DATA_DIR"
+  printf 'REALTOR_INSTALL_DIR=%s\nREALTOR_DATA_DIR=%s\nREALTOR_ISOLATED=%s\n' \
+    "$INSTALL_DIR" "$REALTOR_DATA_DIR" "$REALTOR_ISOLATED" >"${REALTOR_DATA_DIR}/install.env"
   export REALTOR_INSTALL_DIR="$INSTALL_DIR"
   export REALTOR_REPO_ROOT="$INSTALL_DIR"
   exec bash scripts/launch-wizard.sh

@@ -4,7 +4,7 @@
 # Otherwise: fnm → Node 22 LTS in ~/.local/share/fnm (no sudo)
 set -euo pipefail
 
-FNM_DIR="${FNM_DIR:-$HOME/.local/share/fnm}"
+FNM_DIR="${FNM_DIR:-${REALTOR_DATA_DIR:-$HOME/.realtor-os}/fnm}"
 NODE_VERSION="${REALTOR_NODE_VERSION:-22}"
 
 log() { printf '[realtor-os] %s\n' "$1"; }

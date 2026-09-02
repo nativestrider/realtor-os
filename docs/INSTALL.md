@@ -14,15 +14,13 @@ curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scrip
 
 Installs into a **user-local sandbox** (no sudo, no system Node changes):
 
-| Path | Contents |
-|------|----------|
-| `~/.local/share/realtor-os/app/` | Application source |
-| `~/.local/share/realtor-os/pnpm-store/` | pnpm packages |
-| `~/.local/share/fnm/` | Node.js (via fnm) |
-| `~/.realtor-os/` | Listings, database, settings |
-| `~/.local/bin/realtor-os` | Shortcut to start the app |
+| What | Default location | User chooses? |
+|------|------------------|---------------|
+| **App** (the program folder) | `~/RealtorOS` (Mac/Linux) or `%USERPROFILE%\RealtorOS` (Windows) | **Yes** — installer asks, or set `REALTOR_INSTALL_DIR` |
+| **Your listings & settings** | `~/.realtor-os` | No — automatic, like app data |
+| **Node / pnpm cache** | inside `~/.realtor-os/` | No — hidden support files |
 
-Override app location: `REALTOR_INSTALL_DIR=~/RealtorOS curl … | bash`
+The app opens in your **web browser** (`http://127.0.0.1:7456`) — not as a normal Mac `.app` in Applications.
 
 ### macOS, Linux, and Windows
 
@@ -40,7 +38,8 @@ AI CLIs (Claude, Codex, Kimi) install separately and keep their own login — Re
 
 This script:
 
-1. Clones (or updates) the repo into **`~/.local/share/realtor-os/app`** (override with `REALTOR_INSTALL_DIR`)
+1. Asks where to install the **app folder** (default `~/RealtorOS`)
+2. Clones (or updates) the repo there
 2. Runs **`scripts/launch-wizard.sh`**, which installs Node.js, Git, pnpm, Playwright Chromium, checks your AI CLIs, and opens the app
 
 You do **not** need Node, Git, or pnpm installed beforehand — the wizard installs what it can. You still need to sign in to Claude / Codex / Kimi when prompted.

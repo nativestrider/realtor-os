@@ -43,7 +43,7 @@ The wizard installs **Node.js**, **Git** (optional), **pnpm**, and **Playwright 
 
 ### One command (Mac or Linux)
 
-Downloads the app to a **user-local folder** (`~/.local/share/realtor-os/app`) and runs the wizard. Does not use sudo or replace your system Node.
+Downloads the app and runs the wizard. **Asks where to install** (default `~/RealtorOS`). Listings live in `~/.realtor-os`. Does not use sudo.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash
@@ -57,7 +57,7 @@ After setup, start anytime with **`realtor-os`** (if `~/.local/bin` is on your P
 powershell -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.ps1 | iex"
 ```
 
-Installs to `%LOCALAPPDATA%\realtor-os\app` — no admin. Start with `realtor-os`.  
+Installs to `%USERPROFILE%\RealtorOS` — no admin. Start with `realtor-os`.  
 **macOS / Linux / WSL:** `curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash`
 
 **New machine or OS reinstall?** See **[docs/INSTALL.md](docs/INSTALL.md)** for backup paths and the full checklist.

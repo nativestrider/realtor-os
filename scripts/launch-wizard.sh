@@ -545,9 +545,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$ROOT/.realtor-preferences.env"
 PREFS_JSON="$ROOT/apps/web/public/realtor-preferences.json"
 
-if [[ -f "${HOME}/.local/share/realtor-os/install.env" ]]; then
+if [[ -f "${HOME}/.realtor-os/install.env" ]]; then
   # shellcheck source=/dev/null
-  source "${HOME}/.local/share/realtor-os/install.env"
+  source "${HOME}/.realtor-os/install.env"
 fi
 export REALTOR_REPO_ROOT="$ROOT"
 export REALTOR_INSTALL_DIR="${REALTOR_INSTALL_DIR:-$ROOT}"
@@ -566,7 +566,7 @@ node_major_version() {
 }
 
 activate_fnm_env() {
-  local fnm_dir="${HOME}/.local/share/fnm"
+  local fnm_dir="${REALTOR_DATA_DIR:-${HOME}/.realtor-os}/fnm"
   export PATH="${fnm_dir}:${HOME}/.local/bin:${PATH}"
   if [[ -x "${fnm_dir}/fnm" ]]; then
     # shellcheck disable=SC2046
@@ -820,8 +820,8 @@ if ! pnpm install; then
   warn "Download failed. Check your internet connection and try again."
   exit 1
 fi
-mkdir -p "${REALTOR_HOME}/pnpm-store" "${PNPM_HOME}"
-pnpm config set store-dir "${REALTOR_HOME}/pnpm-store" 2>/dev/null || true
+mkdir -p "${REALTOR_DATA_DIR}/pnpm-store" "${PNPM_HOME}"
+pnpm config set store-dir "${REALTOR_DATA_DIR}/pnpm-store" 2>/dev/null || true
 printf '  %s✓ App is ready%s\n' "$GREEN" "$RESET"
 pause "Press Enter to continue"
 

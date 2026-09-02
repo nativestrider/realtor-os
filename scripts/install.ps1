@@ -13,9 +13,8 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$RealtorHome = if ($env:REALTOR_HOME) { $env:REALTOR_HOME } else { Join-Path $env:LOCALAPPDATA 'realtor-os' }
-$InstallDir = if ($env:REALTOR_INSTALL_DIR) { $env:REALTOR_INSTALL_DIR } else { Join-Path $RealtorHome 'app' }
 $DataDir = if ($env:REALTOR_DATA_DIR) { $env:REALTOR_DATA_DIR } else { Join-Path $env:USERPROFILE '.realtor-os' }
+$InstallDir = if ($env:REALTOR_INSTALL_DIR) { $env:REALTOR_INSTALL_DIR } else { Join-Path $env:USERPROFILE 'RealtorOS' }
 $RepoZip = 'https://github.com/nativestrider/realtor-os/archive/refs/heads/main.zip'
 $Branch = if ($env:REALTOR_BRANCH) { $env:REALTOR_BRANCH } else { 'main' }
 
@@ -57,7 +56,7 @@ function Ensure-Source {
         return
     }
 
-    New-Item -ItemType Directory -Force -Path $RealtorHome | Out-Null
+    New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
     $git = Get-Command git -ErrorAction SilentlyContinue
     $repoUrl = if ($env:REALTOR_REPO_URL) { $env:REALTOR_REPO_URL } else { 'https://github.com/nativestrider/realtor-os.git' }
 
@@ -86,7 +85,7 @@ function Install-Dependencies {
     Set-Location $InstallDir
     $env:REALTOR_DATA_DIR = $DataDir
     $env:REALTOR_REPO_ROOT = $InstallDir
-    $env:npm_config_store_dir = Join-Path $RealtorHome 'pnpm-store'
+    $env:npm_config_store_dir = Join-Path $DataDir 'pnpm-store'
 
     Write-Log 'Enabling pnpm…'
     & corepack enable 2>$null
@@ -128,7 +127,7 @@ function Try-GitBashWizard {
 
     Write-Log 'Git Bash found — opening full setup wizard (AI sign-in, models)…'
     $env:REALTOR_INSTALL_DIR = $InstallDir
-    $env:REALTOR_HOME = $RealtorHome
+    $env:REALTOR_DATA_DIR = $DataDir
     $env:REALTOR_ISOLATED = '1'
     & $bash -lc "cd '$($InstallDir -replace '\\','/')' && bash scripts/launch-wizard.sh"
     return $true
@@ -164,10 +163,9 @@ Ensure-Source
 
 @(
     "REALTOR_INSTALL_DIR=$InstallDir",
-    "REALTOR_HOME=$RealtorHome",
     "REALTOR_DATA_DIR=$DataDir",
     'REALTOR_ISOLATED=1'
-) | Set-Content -Path (Join-Path $RealtorHome 'install.env') -Encoding UTF8
+) | Set-Content -Path (Join-Path $DataDir 'install.env') -Encoding UTF8
 
 Install-Dependencies
 Write-Launcher
