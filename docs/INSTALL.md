@@ -89,7 +89,7 @@ The wizard can install **Git** and **Node.js** for you, but it does **not** clon
 | **Claude Code CLI** | One of three | latest | `claude` agent | https://docs.anthropic.com/en/docs/claude-code/overview |
 | **Codex CLI** | One of three | latest | `codex` agent (OpenAI / ChatGPT) | https://developers.openai.com/codex/cli/ |
 | **Kimi Code CLI** | One of three | latest | `kimi` agent | https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started.html |
-| **Playwright Chromium** | Yes for Zillow | bundled via repo | Visible browser for Zillow import/verify | `pnpm run setup:browsers` (after `pnpm install`) |
+| **Playwright Chromium** | Yes for listing-site tasks | bundled via repo | Visible browser agents control (imports, verify, supervised browsing) | `pnpm run setup:browsers` (after `pnpm install`) |
 | **Linux Chromium deps** | Linux only, if browser fails | — | System libraries for headful Chromium | `pnpm run setup:browsers:deps` |
 
 You need **at least one** of Claude / Codex / Kimi on your `PATH`. Install all three only if you plan to switch between them.
@@ -147,7 +147,7 @@ Creates:
 - `~/.realtor-os/browser.json` — Chromium path manifest
 - `~/.realtor-os/browser.env` — shell-friendly env vars
 
-Skip with `REALTOR_SKIP_BROWSER_INSTALL=1` only if you will not use Zillow import/verify.
+Skip with `REALTOR_SKIP_BROWSER_INSTALL=1` only if you will not use supervised browser tasks (imports, verify, listing sites).
 
 ### 4. Install and sign in to AI CLIs
 

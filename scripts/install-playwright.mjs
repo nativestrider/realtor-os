@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Install Playwright's bundled Chromium for RealtorOS (Zillow import, browser skills).
+ * Install Playwright's bundled Chromium for RealtorOS (supervised browser for listing sites, imports, verify).
  * Cross-platform: macOS, Windows, Linux.
  *
  * Skip with REALTOR_SKIP_BROWSER_INSTALL=1 or PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
@@ -46,7 +46,7 @@ function runPlaywright(args) {
   return result.status ?? 1;
 }
 
-log('Installing Playwright Chromium (used for Zillow import)…');
+log('Installing Playwright Chromium (built-in browser for listing-site tasks)…');
 const installStatus = runPlaywright(['install', 'chromium']);
 if (installStatus !== 0) {
   warn('Chromium install failed. Retry with: pnpm run setup:browsers');

@@ -130,7 +130,7 @@ install_welcome() {
   log "  3. Setup wizard (~5 minutes):"
   log "       • Node.js (installed for you if missing)"
   log "       • App dependencies"
-  log "       • Browser for Zillow imports (~200 MB)"
+  log "       • Built-in browser for listing sites (~200 MB)"
   log "       • Your AI assistants (Claude, ChatGPT, Kimi)"
   log "       • Optional Desktop icon"
   log "       • Open RealtorOS in your web browser"

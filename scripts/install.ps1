@@ -198,7 +198,7 @@ function Install-Dependencies {
     }
     if ($LASTEXITCODE -ne 0) { throw 'pnpm install failed' }
 
-    Write-Log 'Installing Playwright Chromium for Zillow…'
+    Write-Log 'Installing Playwright Chromium (built-in browser for agents)…'
     & pnpm run setup:browsers
     if ($LASTEXITCODE -ne 0) { Write-Warn 'Browser install failed — retry later: pnpm run setup:browsers' }
 }

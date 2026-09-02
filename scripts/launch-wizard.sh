@@ -50,7 +50,7 @@ banner() {
   printf '  We will:\n'
   printf '    1. Check Node.js (install it for you if missing)\n'
   printf '    2. Download the app files (about 1 minute, one time)\n'
-  printf '    3. Download a browser for Zillow imports (~200 MB, one time)\n'
+  printf '    3. Download a built-in browser for listing sites (~200 MB, one time)\n'
   printf '    4. Ask which AI assistants you use\n'
   printf '    5. Check that you are signed in to them\n'
   printf '    6. Optionally put an icon on your Desktop\n'
@@ -554,9 +554,9 @@ ensure_playwright_browser() {
     SKIPPED+=("Playwright browser — run later: pnpm run setup:browsers")
     return 1
   fi
-  step "Downloading Chromium for Zillow (~200 MB, one time)…"
+  step "Downloading built-in browser (~200 MB, one time)…"
   if pnpm run setup:browsers; then
-    ok_msg "Browser ready for Zillow import"
+    ok_msg "Browser ready for listing-site tasks"
     return 0
   fi
   warn "Browser install failed. You can retry later with: pnpm run setup:browsers"
@@ -892,12 +892,13 @@ pnpm config set store-dir "${REALTOR_DATA_DIR}/pnpm-store" 2>/dev/null || true
 printf '  %s✓ App is ready%s\n' "$GREEN" "$RESET"
 pause "Press Enter to continue"
 
-# ── 2b. Playwright Chromium (Zillow import) ───────────────────────────────
-stage "Browser for Zillow imports"
-say "NEXT: We download a small Chrome browser used only for Zillow."
-say "It is about 200 MB and installs once. Nothing opens on screen yet —"
-say "agents only use it when you import or verify a listing."
-say "This is separate from the RealtorOS page in your normal browser."
+# ── 2b. Playwright Chromium (supervised browser) ────────────────────────────
+stage "Built-in browser for listing sites"
+say "NEXT: We download a small Chrome window your AI agents can control."
+say "They use it to open listing websites — import properties, verify details,"
+say "and similar tasks (not only Zillow). About 200 MB, installs once."
+say "Nothing opens on screen yet. This is separate from the RealtorOS tab"
+say "in your normal browser."
 note ""
 if [[ -f "${REALTOR_DATA_DIR:-$HOME/.realtor-os}/browser.json" ]]; then
   ok_msg "Playwright Chromium is already installed"
