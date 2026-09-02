@@ -987,8 +987,18 @@ $USE_CLAUDE && note "  Claude — model: ${MODEL_CLAUDE:-default}"
 $USE_CODEX && note "  Codex — model: ${MODEL_CODEX:-default}"
 $USE_KIMI && note "  Kimi — model: ${MODEL_KIMI:-default}"
 note ""
-say "We'll open the chat in your browser now."
-say "Keep this window open while you chat."
+say "Desktop shortcut"
+say "We can place a RealtorOS icon on your Desktop so you can open the app"
+say "with a double-click — the same way you open Mail or Safari."
+say "A Terminal window will open briefly while the app starts; keep it open while you chat."
+note ""
+CREATE_DESKTOP_SHORTCUT=false
+if confirm "Add RealtorOS to your Desktop"; then
+  CREATE_DESKTOP_SHORTCUT=true
+fi
+note ""
+say "We'll open the chat in your browser next."
+say "Keep the Terminal window open while you chat."
 say "When you're done, come back here and press Ctrl-C to close the app."
 
 if ! confirm "Open RealtorOS now"; then

@@ -6,6 +6,18 @@ install_dir="${1:?install dir}"
 data_dir="${REALTOR_DATA_DIR:-${HOME}/.realtor-os}"
 
 desktop_dir() {
+  local candidate
+  for candidate in \
+    "${HOME}/Desktop" \
+    "${HOME}/Ambiente de Trabalho" \
+    "${HOME}/Escritorio" \
+    "${HOME}/Bureau" \
+    "${HOME}/Schreibtisch"; do
+    if [[ -d "$candidate" ]]; then
+      printf '%s' "$candidate"
+      return
+    fi
+  done
   if [[ "$(uname -s)" == "Darwin" ]]; then
     printf '%s/Desktop' "$HOME"
     return
