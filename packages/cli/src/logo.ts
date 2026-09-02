@@ -10,6 +10,6 @@ export function printRealtorLogo(): void {
     const art = readFileSync(logoPath, 'utf8');
     console.log(`\n\x1b[1m\x1b[34m${art}\x1b[0m`);
   } catch {
-    console.log('\n  Realtor OS — Multi-Agent AI Chat\n');
+    console.log('\n  RealtorOS\n');
   }
 }
