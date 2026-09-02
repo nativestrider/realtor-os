@@ -14,12 +14,71 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $DataDir = if ($env:REALTOR_DATA_DIR) { $env:REALTOR_DATA_DIR } else { Join-Path $env:USERPROFILE '.realtor-os' }
-$InstallDir = if ($env:REALTOR_INSTALL_DIR) { $env:REALTOR_INSTALL_DIR } else { Join-Path $env:USERPROFILE 'RealtorOS' }
+$DefaultInstallDir = Join-Path $env:USERPROFILE 'RealtorOS'
 $RepoZip = 'https://github.com/nativestrider/realtor-os/archive/refs/heads/main.zip'
 $Branch = if ($env:REALTOR_BRANCH) { $env:REALTOR_BRANCH } else { 'main' }
 
 function Write-Log([string]$Message) { Write-Host "[realtor-os] $Message" }
 function Write-Warn([string]$Message) { Write-Warning "[realtor-os] $Message" }
+
+function Resolve-InstallDirFromPick {
+    param([string]$Picked, [string]$DefaultName = 'RealtorOS')
+    $leaf = Split-Path -Leaf $Picked
+    if ($leaf -eq 'RealtorOS' -or $leaf -eq 'realtor-os') { return $Picked }
+    return Join-Path $Picked $DefaultName
+}
+
+function Pick-InstallDir {
+    if ($env:REALTOR_INSTALL_DIR) { return $env:REALTOR_INSTALL_DIR }
+
+    $default = $DefaultInstallDir
+    if ([Environment]::UserInteractive) {
+        try {
+            Add-Type -AssemblyName System.Windows.Forms | Out-Null
+            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+            $dialog.Description = 'Choose where to install RealtorOS. A RealtorOS folder will be created here unless you select that folder directly.'
+            $dialog.SelectedPath = Split-Path -Parent $default
+            $dialog.ShowNewFolderButton = $true
+            if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+                return Resolve-InstallDirFromPick -Picked $dialog.SelectedPath
+            }
+        } catch {
+            Write-Warn "Folder picker unavailable — using default install path."
+        }
+    }
+
+    Write-Host ''
+    Write-Host "Install folder [$default]"
+    Write-Host 'Press Enter to browse folders, or type a path:'
+    $reply = Read-Host
+    if ([string]::IsNullOrWhiteSpace($reply)) {
+        try {
+            Add-Type -AssemblyName System.Windows.Forms | Out-Null
+            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+            $dialog.Description = 'Choose where to install RealtorOS.'
+            $dialog.SelectedPath = Split-Path -Parent $default
+            $dialog.ShowNewFolderButton = $true
+            if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+                return Resolve-InstallDirFromPick -Picked $dialog.SelectedPath
+            }
+        } catch { }
+        return $default
+    }
+    if ($reply -match '^[bB]$') {
+        try {
+            Add-Type -AssemblyName System.Windows.Forms | Out-Null
+            $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+            $dialog.Description = 'Choose where to install RealtorOS.'
+            $dialog.SelectedPath = Split-Path -Parent $default
+            $dialog.ShowNewFolderButton = $true
+            if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+                return Resolve-InstallDirFromPick -Picked $dialog.SelectedPath
+            }
+        } catch { }
+        return $default
+    }
+    return $reply
+}
 
 function Ensure-Node {
     $node = Get-Command node -ErrorAction SilentlyContinue
@@ -165,8 +224,12 @@ function Print-NextSteps {
 
 # ── Main ────────────────────────────────────────────────────────────────────
 Write-Log 'RealtorOS Windows installer (isolated, no admin)'
-Write-Log "App folder:  $InstallDir"
 Write-Log "Data folder: $DataDir"
+Write-Host ''
+Write-Host 'Choose where to install the RealtorOS app folder.'
+Write-Host 'Your listings and settings always go in .realtor-os (separate).'
+$InstallDir = Pick-InstallDir
+Write-Log "Will install to: $InstallDir"
 
 Ensure-Node
 Ensure-Source

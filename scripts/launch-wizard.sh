@@ -1012,17 +1012,13 @@ fi
 stage "Opening RealtorOS"
 realtor_show_logo "$BOLD" "$DIM" "$BLUE" "$RESET"
 LAUNCHER="$(bash "$ROOT/scripts/write-launcher.sh" "$ROOT")"
-say "Command shortcut: ${LAUNCHER}"
-note "Add ~/.local/bin to PATH to run: realtor-os"
-if confirm "Create Desktop shortcut"; then
+note "Terminal command: realtor-os (if ~/.local/bin is on your PATH)"
+if $CREATE_DESKTOP_SHORTCUT; then
   if DESKTOP_SHORTCUT="$(bash "$ROOT/scripts/write-desktop-shortcut.sh" "$ROOT" 2>/dev/null)"; then
-    ok_msg "Desktop: ${DESKTOP_SHORTCUT}"
-    say "Double-click RealtorOS on your Desktop to start (Terminal opens briefly)."
+    ok_msg "Added to Desktop: $(basename "$DESKTOP_SHORTCUT")"
   else
-    warn "Could not create Desktop shortcut — use realtor-os from Terminal instead."
+    warn "Could not add a Desktop icon — you can still run: bash scripts/launch-wizard.sh"
   fi
-else
-  note "Skipped Desktop shortcut."
 fi
 say "Starting up — your browser will open in a moment…"
 cd "$ROOT"

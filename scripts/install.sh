@@ -105,17 +105,26 @@ pick_install_dir() {
     return
   fi
   local default="${HOME}/RealtorOS"
+  local picker=""
   printf '\n'
   log "Choose where to install the RealtorOS app folder."
   log "Your listings and settings always go in ~/.realtor-os (separate)."
-  printf '  Install folder [%s]: ' "$default"
-  local reply=""
-  read -r reply || true
-  if [[ -z "$reply" ]]; then
-    INSTALL_DIR="$default"
-  else
-    INSTALL_DIR="${reply/#\~/$HOME}"
+  if script_dir="$(resolve_script_dir 2>/dev/null)"; then
+    picker="${script_dir}/pick-install-folder.sh"
   fi
+  if [[ -n "$picker" ]] && [[ -f "$picker" ]]; then
+    INSTALL_DIR="$(bash "$picker" "$default")"
+  else
+    printf '  Install folder [%s]: ' "$default"
+    local reply=""
+    read -r reply || true
+    if [[ -z "$reply" ]]; then
+      INSTALL_DIR="$default"
+    else
+      INSTALL_DIR="${reply/#\~/$HOME}"
+    fi
+  fi
+  log "Will install to: ${INSTALL_DIR}"
   export REALTOR_INSTALL_DIR="$INSTALL_DIR"
 }
 
