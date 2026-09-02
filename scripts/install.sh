@@ -4,7 +4,10 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install.sh | bash
 #
-# Install to a specific folder (curl pipe cannot read your keyboard):
+# Channels (default: stable):
+#   REALTOR_CHANNEL=stable curl … | bash    # tagged release (recommended)
+#   REALTOR_CHANNEL=beta  curl … | bash     # beta branch
+#   REALTOR_CHANNEL=dev   curl … | bash     # main branch (developers)
 #   REALTOR_INSTALL_DIR="$HOME/Developer/realtor-os" curl -fsSL .../install.sh | bash
 #
 # Or download first — opens the folder picker and other prompts:
@@ -13,10 +16,64 @@
 #
 set -euo pipefail
 
+SCRIPT_LIB=""
+RESOLVE_CHANNEL_LOADED=0
+
+load_resolve_channel() {
+  [[ "$RESOLVE_CHANNEL_LOADED" == 1 ]] && return 0
+  local script_dir="" tmp=""
+  if script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"; then
+    if [[ -f "${script_dir}/lib/resolve-channel.sh" ]]; then
+      # shellcheck source=scripts/lib/resolve-channel.sh
+      source "${script_dir}/lib/resolve-channel.sh"
+      RESOLVE_CHANNEL_LOADED=1
+      return 0
+    fi
+  fi
+  tmp="$(mktemp)"
+  if curl -fsSL "https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/lib/resolve-channel.sh" -o "$tmp" 2>/dev/null; then
+    # shellcheck source=/dev/null
+    source "$tmp"
+    RESOLVE_CHANNEL_LOADED=1
+  fi
+  rm -f "$tmp"
+  if [[ "$RESOLVE_CHANNEL_LOADED" != 1 ]]; then
+    warn "Could not load channel resolver — using stable defaults."
+    realtor_channel_label() { printf 'Stable'; }
+    realtor_load_channel_config() { true; }
+    realtor_resolve_channel() {
+      export REALTOR_CHANNEL="${REALTOR_CHANNEL:-stable}"
+      export REALTOR_GIT_REF="${REALTOR_GIT_REF:-${REALTOR_BRANCH:-v0.1.0}}"
+      export REALTOR_VERSION="${REALTOR_VERSION:-0.1.0}"
+      export REALTOR_FROZEN_LOCKFILE=1
+    }
+    realtor_source_archive_url() {
+      if [[ "$1" == v* ]]; then
+        printf 'https://github.com/nativestrider/realtor-os/archive/refs/tags/%s.tar.gz' "$1"
+      else
+        printf 'https://github.com/nativestrider/realtor-os/archive/refs/heads/%s.tar.gz' "$1"
+      fi
+    }
+    realtor_resolve_archive_root() {
+      local tmp="$1" ref="$2" stripped="${2#v}" candidate
+      for candidate in "${tmp}/realtor-os-${ref}" "${tmp}/realtor-os-${stripped}" "${tmp}/realtor-os-main"; do
+        if [[ -d "$candidate" ]]; then
+          printf '%s' "$candidate"
+          return 0
+        fi
+      done
+      return 1
+    }
+    RESOLVE_CHANNEL_LOADED=1
+  fi
+}
+
+load_resolve_channel
+
 REALTOR_DATA_DIR="${REALTOR_DATA_DIR:-${HOME}/.realtor-os}"
 REPO_URL="${REALTOR_REPO_URL:-https://github.com/nativestrider/realtor-os.git}"
 INSTALL_DIR="${REALTOR_INSTALL_DIR:-${HOME}/RealtorOS}"
-BRANCH="${REALTOR_BRANCH:-main}"
+INSTALL_SCRIPT_DIR=""
 # Isolated install: no sudo, no Homebrew Node — everything under ~/.local and ~/.realtor-os
 export REALTOR_ISOLATED="${REALTOR_ISOLATED:-1}"
 
@@ -85,6 +142,12 @@ install_welcome() {
   printf '\n'
   log "We never ask for your Mac password and never change system Node."
   printf '\n'
+  log "Install channel: $(realtor_channel_label)"
+  log "Version:         ${REALTOR_VERSION} (${REALTOR_GIT_REF})"
+  if [[ "${REALTOR_CHANNEL}" == "dev" ]]; then
+    log "Dev channel — latest code from main; for developers and testers."
+  fi
+  printf '\n'
   install_pause "Press Enter when you have read this and are ready to start"
 }
 
@@ -99,7 +162,7 @@ ensure_git() {
     local tmp
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' RETURN
-    curl -fsSL "https://raw.githubusercontent.com/nativestrider/realtor-os/${BRANCH}/scripts/install-git.sh" -o "${tmp}/install-git.sh"
+    curl -fsSL "https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/install-git.sh" -o "${tmp}/install-git.sh"
     chmod +x "${tmp}/install-git.sh"
     bash "${tmp}/install-git.sh"
     return $?
@@ -109,12 +172,12 @@ ensure_git() {
 
 fetch_without_git() {
   log "Git not found — downloading source archive from GitHub…"
-  local tmp archive_root
+  local tmp archive_root url
   tmp="$(mktemp -d)"
-  curl -fsSL "https://github.com/nativestrider/realtor-os/archive/refs/heads/${BRANCH}.tar.gz" -o "${tmp}/repo.tar.gz"
+  url="$(realtor_source_archive_url "$REALTOR_GIT_REF")"
+  curl -fsSL "$url" -o "${tmp}/repo.tar.gz"
   tar xzf "${tmp}/repo.tar.gz" -C "${tmp}"
-  archive_root="${tmp}/realtor-os-${BRANCH}"
-  if [[ ! -d "$archive_root" ]]; then
+  if ! archive_root="$(realtor_resolve_archive_root "$tmp" "$REALTOR_GIT_REF")"; then
     warn "Unexpected archive layout"
     exit 1
   fi
@@ -130,10 +193,10 @@ fetch_without_git() {
 clone_into_install_dir() {
   if install_dir_is_empty "$INSTALL_DIR"; then
     if [[ -d "$INSTALL_DIR" ]]; then
-      (cd "$INSTALL_DIR" && git clone --depth 1 --branch "$BRANCH" "$REPO_URL" .)
+      (cd "$INSTALL_DIR" && git clone --depth 1 --branch "$REALTOR_GIT_REF" "$REPO_URL" .)
     else
       mkdir -p "$(dirname "$INSTALL_DIR")"
-      git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR"
+      git clone --depth 1 --branch "$REALTOR_GIT_REF" "$REPO_URL" "$INSTALL_DIR"
     fi
   else
     warn "Install folder is not empty: ${INSTALL_DIR}"
@@ -146,8 +209,8 @@ clone_or_update() {
   if [[ -f "${INSTALL_DIR}/scripts/launch-wizard.sh" ]]; then
     log "Using existing install at ${INSTALL_DIR}"
     if [[ -d "${INSTALL_DIR}/.git" ]] && command -v git >/dev/null 2>&1; then
-      git -C "$INSTALL_DIR" fetch origin "$BRANCH" 2>/dev/null || true
-      git -C "$INSTALL_DIR" checkout "$BRANCH" 2>/dev/null || true
+      git -C "$INSTALL_DIR" fetch origin "$REALTOR_GIT_REF" 2>/dev/null || true
+      git -C "$INSTALL_DIR" checkout "$REALTOR_GIT_REF" 2>/dev/null || true
       git -C "$INSTALL_DIR" pull --ff-only 2>/dev/null || true
     fi
     return 0
@@ -191,7 +254,7 @@ resolve_picker_script() {
     fi
   fi
   tmp_picker="$(mktemp)"
-  if curl -fsSL "https://raw.githubusercontent.com/nativestrider/realtor-os/${BRANCH}/scripts/pick-install-folder.sh" -o "$tmp_picker" 2>/dev/null; then
+  if curl -fsSL "https://raw.githubusercontent.com/nativestrider/realtor-os/main/scripts/pick-install-folder.sh" -o "$tmp_picker" 2>/dev/null; then
     chmod +x "$tmp_picker"
     printf '%s' "$tmp_picker"
     return 0
@@ -271,20 +334,43 @@ pick_install_dir() {
   export REALTOR_INSTALL_DIR="$INSTALL_DIR"
 }
 
+write_install_env() {
+  mkdir -p "$REALTOR_DATA_DIR"
+  printf 'REALTOR_INSTALL_DIR=%s\nREALTOR_DATA_DIR=%s\nREALTOR_ISOLATED=%s\nREALTOR_CHANNEL=%s\nREALTOR_VERSION=%s\nREALTOR_GIT_REF=%s\nREALTOR_FROZEN_LOCKFILE=%s\n' \
+    "$INSTALL_DIR" "$REALTOR_DATA_DIR" "$REALTOR_ISOLATED" \
+    "$REALTOR_CHANNEL" "$REALTOR_VERSION" "$REALTOR_GIT_REF" "$REALTOR_FROZEN_LOCKFILE" \
+    >"${REALTOR_DATA_DIR}/install.env"
+}
+
 main() {
+  if script_dir="$(resolve_script_dir 2>/dev/null || true)"; then
+    INSTALL_SCRIPT_DIR="$script_dir"
+    realtor_load_channel_config "$script_dir"
+    if [[ -f "${script_dir}/launch-wizard.sh" ]]; then
+      export REALTOR_CHANNEL=dev
+    fi
+  else
+    realtor_load_channel_config ""
+  fi
+  realtor_resolve_channel
+
   install_welcome
   log "RealtorOS installer (isolated user environment)"
   log "Data folder:    ${REALTOR_DATA_DIR:-${HOME}/.realtor-os}"
   log "Does not use sudo or change system Node/npm by default."
 
-  if script_dir="$(resolve_script_dir)"; then
-    repo_root="$(cd "${script_dir}/.." && pwd)"
+  if [[ -n "$INSTALL_SCRIPT_DIR" ]]; then
+    repo_root="$(cd "${INSTALL_SCRIPT_DIR}/.." && pwd)"
     if [[ -f "${repo_root}/scripts/launch-wizard.sh" ]]; then
-      log "Running wizard from current checkout: ${repo_root}"
+      log "Dev checkout detected — running wizard from: ${repo_root}"
       cd "$repo_root"
+      INSTALL_DIR="$repo_root"
+      export REALTOR_INSTALL_DIR="$repo_root"
+      export REALTOR_REPO_ROOT="$repo_root"
+      write_install_env
       exec bash scripts/launch-wizard.sh
     fi
-    REALTOR_INSTALL_SCRIPT_DIR="$script_dir"
+    REALTOR_INSTALL_SCRIPT_DIR="$INSTALL_SCRIPT_DIR"
   fi
 
   pick_install_dir
@@ -292,6 +378,7 @@ main() {
 
   printf '\n'
   log "STEP 2 of 3 — Download the app"
+  log "Channel: ${REALTOR_CHANNEL} — fetching ${REALTOR_GIT_REF}"
   log "NEXT: We download RealtorOS into:"
   log "  ${INSTALL_DIR}"
   log "This usually takes 1–2 minutes. You will see download progress below."
@@ -311,9 +398,7 @@ main() {
   install_pause "Press Enter to start the setup wizard"
   log "Starting setup wizard…"
   cd "$INSTALL_DIR"
-  mkdir -p "$REALTOR_DATA_DIR"
-  printf 'REALTOR_INSTALL_DIR=%s\nREALTOR_DATA_DIR=%s\nREALTOR_ISOLATED=%s\n' \
-    "$INSTALL_DIR" "$REALTOR_DATA_DIR" "$REALTOR_ISOLATED" >"${REALTOR_DATA_DIR}/install.env"
+  write_install_env
   export REALTOR_INSTALL_DIR="$INSTALL_DIR"
   export REALTOR_REPO_ROOT="$INSTALL_DIR"
   exec bash scripts/launch-wizard.sh

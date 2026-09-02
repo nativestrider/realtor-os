@@ -15,8 +15,34 @@ $ErrorActionPreference = 'Stop'
 
 $DataDir = if ($env:REALTOR_DATA_DIR) { $env:REALTOR_DATA_DIR } else { Join-Path $env:USERPROFILE '.realtor-os' }
 $DefaultInstallDir = Join-Path $env:USERPROFILE 'RealtorOS'
-$RepoZip = 'https://github.com/nativestrider/realtor-os/archive/refs/heads/main.zip'
-$Branch = if ($env:REALTOR_BRANCH) { $env:REALTOR_BRANCH } else { 'main' }
+
+function Resolve-InstallChannel {
+    if ($env:REALTOR_GIT_REF) {
+        return @{
+            Channel = if ($env:REALTOR_CHANNEL) { $env:REALTOR_CHANNEL.ToLower() } else { 'custom' }
+            GitRef  = $env:REALTOR_GIT_REF
+            Version = if ($env:REALTOR_VERSION) { $env:REALTOR_VERSION } else { $env:REALTOR_GIT_REF }
+            Frozen  = $true
+        }
+    }
+    $channel = if ($env:REALTOR_CHANNEL) { $env:REALTOR_CHANNEL.ToLower() } elseif ($env:REALTOR_BRANCH) { 'dev' } else { 'stable' }
+    switch ($channel) {
+        'beta' {
+            return @{ Channel = 'beta'; GitRef = 'beta'; Version = 'beta'; Frozen = $true }
+        }
+        { $_ -in 'dev', 'main', 'edge' } {
+            return @{ Channel = 'dev'; GitRef = if ($env:REALTOR_BRANCH) { $env:REALTOR_BRANCH } else { 'main' }; Version = 'dev'; Frozen = $false }
+        }
+        default {
+            return @{ Channel = 'stable'; GitRef = 'v0.1.0'; Version = '0.1.0'; Frozen = $true }
+        }
+    }
+}
+
+$ChannelInfo = Resolve-InstallChannel
+$GitRef = $ChannelInfo.GitRef
+$RealtorVersion = $ChannelInfo.Version
+$FrozenLockfile = $ChannelInfo.Frozen
 
 function Write-Log([string]$Message) { Write-Host "[realtor-os] $Message" }
 function Write-Warn([string]$Message) { Write-Warning "[realtor-os] $Message" }
@@ -108,6 +134,18 @@ Or use winget: winget install OpenJS.NodeJS.LTS
 "@
 }
 
+function Get-SourceArchiveUrl([string]$Ref) {
+    if ($Ref.StartsWith('v')) {
+        return "https://github.com/nativestrider/realtor-os/archive/refs/tags/$Ref.zip"
+    }
+    return "https://github.com/nativestrider/realtor-os/archive/refs/heads/$Ref.zip"
+}
+
+function Get-ExtractedFolderName([string]$Ref) {
+    if ($Ref.StartsWith('v')) { return "realtor-os-$($Ref.Substring(1))" }
+    return "realtor-os-$Ref"
+}
+
 function Ensure-Source {
     $wizard = Join-Path $InstallDir 'scripts\launch-wizard.sh'
     if (Test-Path $wizard) {
@@ -120,19 +158,20 @@ function Ensure-Source {
     $repoUrl = if ($env:REALTOR_REPO_URL) { $env:REALTOR_REPO_URL } else { 'https://github.com/nativestrider/realtor-os.git' }
 
     if ($git) {
-        Write-Log "Cloning $repoUrl → $InstallDir"
+        Write-Log "Cloning $repoUrl ($GitRef) → $InstallDir"
         if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
-        & git clone --depth 1 --branch $Branch $repoUrl $InstallDir
+        & git clone --depth 1 --branch $GitRef $repoUrl $InstallDir
         return
     }
 
-    Write-Log 'Downloading source from GitHub (no Git required)…'
-    $tmpZip = Join-Path $env:TEMP 'realtor-os-main.zip'
+    Write-Log "Downloading source from GitHub ($($ChannelInfo.Channel) / $GitRef)…"
+    $repoZip = Get-SourceArchiveUrl $GitRef
+    $tmpZip = Join-Path $env:TEMP "realtor-os-$GitRef.zip"
     $tmpExtract = Join-Path $env:TEMP 'realtor-os-extract'
-    Invoke-WebRequest -Uri $RepoZip -OutFile $tmpZip -UseBasicParsing
+    Invoke-WebRequest -Uri $repoZip -OutFile $tmpZip -UseBasicParsing
     if (Test-Path $tmpExtract) { Remove-Item -Recurse -Force $tmpExtract }
     Expand-Archive -Path $tmpZip -DestinationPath $tmpExtract -Force
-    $extracted = Join-Path $tmpExtract 'realtor-os-main'
+    $extracted = Join-Path $tmpExtract (Get-ExtractedFolderName $GitRef)
     if (-not (Test-Path $extracted)) { throw 'Unexpected archive layout' }
     if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir }
     Move-Item $extracted $InstallDir
@@ -150,8 +189,13 @@ function Install-Dependencies {
     & corepack enable 2>$null
     & corepack prepare pnpm@10.28.0 --activate
 
-    Write-Log 'Installing packages (pnpm install)…'
-    & pnpm install
+    if ($FrozenLockfile) {
+        Write-Log 'Installing packages (pnpm install --frozen-lockfile)…'
+        & pnpm install --frozen-lockfile
+    } else {
+        Write-Log 'Installing packages (dev channel — pnpm install)…'
+        & pnpm install
+    }
     if ($LASTEXITCODE -ne 0) { throw 'pnpm install failed' }
 
     Write-Log 'Installing Playwright Chromium for Zillow…'
@@ -198,6 +242,8 @@ function Try-GitBashWizard {
     $env:REALTOR_INSTALL_DIR = $InstallDir
     $env:REALTOR_DATA_DIR = $DataDir
     $env:REALTOR_ISOLATED = '1'
+    $env:REALTOR_CHANNEL = $ChannelInfo.Channel
+    $env:REALTOR_FROZEN_LOCKFILE = [string][int]$FrozenLockfile
     & $bash -lc "cd '$($InstallDir -replace '\\','/')' && bash scripts/launch-wizard.sh"
     return $true
 }
@@ -228,6 +274,7 @@ Write-Log "Data folder: $DataDir"
 Write-Host ''
 Write-Host 'Choose where to install the RealtorOS app folder.'
 Write-Host 'Your listings and settings always go in .realtor-os (separate).'
+Write-Log "Channel: $($ChannelInfo.Channel) ($GitRef)"
 $InstallDir = Pick-InstallDir
 Write-Log "Will install to: $InstallDir"
 
@@ -237,7 +284,11 @@ Ensure-Source
 @(
     "REALTOR_INSTALL_DIR=$InstallDir",
     "REALTOR_DATA_DIR=$DataDir",
-    'REALTOR_ISOLATED=1'
+    'REALTOR_ISOLATED=1',
+    "REALTOR_CHANNEL=$($ChannelInfo.Channel)",
+    "REALTOR_VERSION=$RealtorVersion",
+    "REALTOR_GIT_REF=$GitRef",
+    "REALTOR_FROZEN_LOCKFILE=$([int]$FrozenLockfile)"
 ) | Set-Content -Path (Join-Path $DataDir 'install.env') -Encoding UTF8
 
 Install-Dependencies

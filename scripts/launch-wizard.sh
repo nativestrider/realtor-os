@@ -57,6 +57,14 @@ banner() {
   printf '    7. Open RealtorOS in your web browser\n\n'
   printf '  Keep this Terminal window open while you chat. When you are done,\n'
   printf '  come back here and press Ctrl-C to close the app.\n\n'
+  if [[ -n "${REALTOR_CHANNEL:-}" ]]; then
+    printf '  Channel: %s · version %s (%s)\n' \
+      "${REALTOR_CHANNEL}" "${REALTOR_VERSION:-?}" "${REALTOR_GIT_REF:-?}"
+    if [[ "${REALTOR_CHANNEL}" == "dev" ]]; then
+      printf '  (Dev — latest from main; dependency versions may shift.)\n'
+    fi
+    printf '\n'
+  fi
   printf '  You can stop anytime (Ctrl-C) and come back later — we remember\n'
   printf '  your choices.%s\n' "$RESET"
   note "Full software list & reinstall guide: docs/INSTALL.md"
@@ -557,6 +565,18 @@ ensure_playwright_browser() {
   return 1
 }
 
+install_app_dependencies() {
+  if [[ "${REALTOR_FROZEN_LOCKFILE:-1}" == "1" ]]; then
+    say "NEXT: Install exact npm versions from the lockfile (reproducible)."
+    step "Running pnpm install --frozen-lockfile…"
+    pnpm install --frozen-lockfile
+  else
+    say "NEXT: Install npm packages (dev channel — may update the lockfile)."
+    step "Running pnpm install…"
+    pnpm install
+  fi
+}
+
 finish() {
   _clear
   printf '\n%s%s  All done!%s\n' "$BOLD" "$GREEN" "$RESET"
@@ -581,6 +601,16 @@ PREFS_JSON="$ROOT/apps/web/public/realtor-preferences.json"
 if [[ -f "${HOME}/.realtor-os/install.env" ]]; then
   # shellcheck source=/dev/null
   source "${HOME}/.realtor-os/install.env"
+fi
+# Running from a git checkout without install.env → dev channel (this repo).
+if [[ -z "${REALTOR_CHANNEL:-}" ]] && [[ -d "$ROOT/.git" ]]; then
+  export REALTOR_CHANNEL=dev
+  export REALTOR_FROZEN_LOCKFILE=0
+  export REALTOR_VERSION="${REALTOR_VERSION:-dev}"
+  export REALTOR_GIT_REF="${REALTOR_GIT_REF:-main}"
+fi
+if [[ -f "$ROOT/.node-version" ]]; then
+  export REALTOR_NODE_VERSION="$(tr -d '[:space:]' < "$ROOT/.node-version")"
 fi
 export REALTOR_REPO_ROOT="$ROOT"
 export REALTOR_INSTALL_DIR="${REALTOR_INSTALL_DIR:-$ROOT}"
@@ -853,7 +883,7 @@ if ! cmd_exists pnpm; then
   exit 1
 fi
 step "Downloading now — grab a coffee ☕"
-if ! pnpm install; then
+if ! install_app_dependencies; then
   warn "Download failed. Check your internet connection and try again."
   exit 1
 fi
