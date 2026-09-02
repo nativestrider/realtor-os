@@ -10,10 +10,6 @@ interface PropertyActionsProps {
 }
 
 export function PropertyActions({ actions, running, onRun, embedded }: PropertyActionsProps) {
-  const ready = actions.filter((a) => a.availability === 'ready');
-  const done = actions.filter((a) => a.availability === 'done');
-  const blocked = actions.filter((a) => a.availability === 'blocked');
-
   if (actions.length === 0) return null;
 
   return (
@@ -22,53 +18,36 @@ export function PropertyActions({ actions, running, onRun, embedded }: PropertyA
       aria-label="Property actions"
     >
       <h3 className="property-actions-title">Actions</h3>
-      <p className="property-actions-hint">Only actions that fit this property&apos;s data are enabled.</p>
+      <p className="property-actions-hint">
+        Chat is free-form. Run workflows here — each action lists which agents can run it.
+      </p>
 
       <ul className="property-actions-list">
-        {ready.map((action) => (
-          <li key={action.skill.id} className="property-action-item property-action-ready">
+        {actions.map((action) => (
+          <li
+            key={action.skill.id}
+            className={`property-action-item property-action-${action.availability}`}
+          >
             <div className="property-action-body">
               <strong>{action.skill.name}</strong>
               <span className="property-action-reason">{action.reason}</span>
+              <span className="property-action-meta">Runs on {action.allowedAgentsLabel}</span>
             </div>
-            <button
-              type="button"
-              className="primary-btn btn-sm"
-              disabled={running}
-              onClick={() => onRun(action)}
-            >
-              {action.runLabel}
-            </button>
-          </li>
-        ))}
-
-        {done.map((action) => (
-          <li key={action.skill.id} className="property-action-item property-action-done">
-            <div className="property-action-body">
-              <strong>{action.skill.name}</strong>
-              <span className="property-action-reason">{action.reason}</span>
-            </div>
-            <button
-              type="button"
-              className="secondary-btn btn-sm"
-              disabled={running}
-              onClick={() => onRun(action)}
-              title="Re-run only if you need to verify or refresh"
-            >
-              {action.runLabel}
-            </button>
-          </li>
-        ))}
-
-        {blocked.map((action) => (
-          <li key={action.skill.id} className="property-action-item property-action-blocked">
-            <div className="property-action-body">
-              <strong>{action.skill.name}</strong>
-              <span className="property-action-reason">{action.reason}</span>
-            </div>
-            <span className="property-action-locked" aria-hidden>
-              —
-            </span>
+            {action.availability === 'blocked' ? (
+              <span className="property-action-locked" aria-hidden>
+                —
+              </span>
+            ) : (
+              <button
+                type="button"
+                className={action.availability === 'done' ? 'secondary-btn btn-sm' : 'primary-btn btn-sm'}
+                disabled={running}
+                onClick={() => onRun(action)}
+                title={action.availability === 'done' ? 'Re-run only if you need to verify or refresh' : undefined}
+              >
+                {action.runLabel}
+              </button>
+            )}
           </li>
         ))}
       </ul>

@@ -24,6 +24,7 @@ interface PropertyMediaPanelProps {
   onRunAction: (action: SkillAdmissibility) => void;
   onPropertyUpdated: () => void;
   onZillowImport: (url: string) => void;
+  onCompZillowImport?: (url: string) => void;
   onAssetChange?: (asset: PropertyAsset) => void;
 }
 
@@ -39,6 +40,7 @@ export function PropertyMediaPanel({
   onRunAction,
   onPropertyUpdated,
   onZillowImport,
+  onCompZillowImport,
   onAssetChange,
 }: PropertyMediaPanelProps) {
   const [tab, setTab] = useState<Tab>('overview');
@@ -153,6 +155,8 @@ export function PropertyMediaPanel({
             propertyId={property.id}
             comparables={comparables}
             onChange={onComparablesChange}
+            onImportFromZillow={onCompZillowImport}
+            importingFromZillow={actionsRunning}
             embedded
           />
         </div>

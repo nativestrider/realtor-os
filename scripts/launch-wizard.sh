@@ -24,6 +24,10 @@ ENV_FILE="${ENV_FILE:-.realtor-preferences.env}"
 WRITTEN_ENV=()
 WRITTEN_SECRET=()
 SKIPPED=()
+USE_CLAUDE=false
+USE_CODEX=false
+USE_KIMI=false
+USE_GROK=false
 
 banner() {
   _ui_clear
@@ -54,23 +58,67 @@ open_url() {
   } >/dev/null 2>&1 || warn "couldn't open a browser — visit it manually: $url"
 }
 
-# Read one key for interactive menus (↑/↓/Space/Enter).
+# Keyboard from the real Terminal, even when stdin is a curl pipe.
+_menu_can_interact() {
+  { [[ -t 0 ]] || [[ -r /dev/tty ]]; } && { [[ -t 1 ]] || [[ -t 2 ]]; }
+}
+
+_menu_read_char() {
+  local timeout="${1:-}"
+  if [[ -t 0 ]]; then
+    if [[ -n "$timeout" ]]; then
+      IFS= read -rsn1 -t "$timeout" REPLY || return 1
+    else
+      IFS= read -rsn1 REPLY || return 1
+    fi
+  elif [[ -r /dev/tty ]]; then
+    if [[ -n "$timeout" ]]; then
+      IFS= read -rsn1 -t "$timeout" REPLY </dev/tty || return 1
+    else
+      IFS= read -rsn1 REPLY </dev/tty || return 1
+    fi
+  else
+    return 1
+  fi
+}
+
+_menu_read_line() {
+  if [[ -t 0 ]]; then
+    read -r REPLY || return 1
+  elif [[ -r /dev/tty ]]; then
+    read -r REPLY </dev/tty || return 1
+  else
+    return 1
+  fi
+}
+
+_menu_read_chars() {
+  local n="$1"
+  if [[ -t 0 ]]; then
+    IFS= read -rsn"$n" REPLY || return 1
+  elif [[ -r /dev/tty ]]; then
+    IFS= read -rsn"$n" REPLY </dev/tty || return 1
+  else
+    return 1
+  fi
+}
+
+# Read one key. Arrow keys arrive as ESC + "[A"/[B] — read the rest as one burst.
+# Do not use fractional read -t (broken on macOS bash 3.2); that was reprinting the menu.
 read_key() {
-  local k k2
-  IFS= read -rsn1 k || return 1
+  local k rest=""
+  _menu_read_char || return 1
+  k="$REPLY"
   case "$k" in
     $'\x1b')
-      read -rsn1 -t 0.01 k2 || true
-      if [[ "$k2" == '[' ]]; then
-        read -rsn1 -t 0.01 k2 || true
-        case "$k2" in
-          A) REPLY=up ;;
-          B) REPLY=down ;;
-          *) REPLY=other ;;
-        esac
-      else
-        REPLY=other
-      fi
+      _menu_read_chars 2 && rest="$REPLY" || rest=""
+      case "$rest" in
+        '[A') REPLY=up ;;
+        '[B') REPLY=down ;;
+        '[C') REPLY=right ;;
+        '[D') REPLY=left ;;
+        *) REPLY=other ;;
+      esac
       ;;
     ' ') REPLY=space ;;
     ''|$'\n') REPLY=enter ;;
@@ -80,41 +128,19 @@ read_key() {
 }
 
 _menu_hide_cursor() {
-  [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && tput civis 2>/dev/null || true
+  printf '\033[?25l' >&2
 }
 
 _menu_show_cursor() {
-  [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && tput cnorm 2>/dev/null || true
+  printf '\033[?25h' >&2
 }
 
-_menu_move_up() {
+# Rewind N lines and wipe from the cursor to the end of the screen.
+# Menu + headers both write to stderr, so the cursor stays on one stream.
+_menu_clear_lines() {
   local n="$1"
   (( n > 0 )) || return 0
-  if command -v tput >/dev/null 2>&1; then
-    tput cuu "$n" 2>/dev/null || printf '\033[%dA' "$n"
-  else
-    printf '\033[%dA' "$n"
-  fi
-}
-
-# Move cursor up N lines and erase each one (prevents leftover text on redraw).
-_menu_clear_lines() {
-  local n="$1" i
-  (( n > 0 )) || return 0
-  _menu_move_up "$n"
-  for (( i=0; i<n; i++ )); do
-    if command -v tput >/dev/null 2>&1; then
-      tput el 2>/dev/null || printf '\033[2K\r'
-      if (( i < n - 1 )); then
-        tput cud1 2>/dev/null || printf '\033[1B'
-      fi
-    else
-      printf '\033[2K\r'
-      if (( i < n - 1 )); then
-        printf '\033[1B'
-      fi
-    fi
-  done
+  printf '\033[%dA\033[J' "$n" >&2
 }
 
 # Multi-select menu: ↑/↓ move, Space toggle, Enter confirm (at least one required).
@@ -143,7 +169,7 @@ multiselect() {
     shift
   done
 
-  if [[ ! -t 0 || ! -t 1 || ${#options[@]} -eq 0 ]]; then
+  if [[ ${#options[@]} -eq 0 ]] || ! _menu_can_interact; then
     local i choice picked=()
     say "$prompt"
     for i in "${!options[@]}"; do
@@ -151,7 +177,8 @@ multiselect() {
     done
     note "  Type numbers separated by spaces, then press Enter."
     printf '  %s> %s' "$BOLD" "$RESET"
-    read -r choice || true
+    _menu_read_line || true
+    choice="${REPLY:-}"
     for token in $choice; do
       if [[ "$token" =~ ^[0-9]+$ ]] && (( token >= 1 && token <= ${#options[@]} )); then
         picked+=("$((token - 1))")
@@ -184,22 +211,15 @@ multiselect() {
   trap '_menu_show_cursor' RETURN
 
   while true; do
-    if (( line_count > 0 )); then
-      _menu_clear_lines "$line_count"
-    fi
-    line_count=0
-
-    printf '  %s%s%s\n' "$BOLD" "$prompt" "$RESET"
-    line_count=$((line_count + 1))
+    ui_header_refresh "${_WIZARD_HEADER_TITLE:-Choose}"
+    say "$prompt"
     for i in "${!options[@]}"; do
       local mark=" " prefix="  "
       [[ ${selected[$i]} -eq 1 ]] && mark="x"
       [[ $i -eq $cursor ]] && prefix="${BLUE}> "
-      printf '%s[%s] %s\n' "$prefix" "$mark" "${options[$i]}"
-      line_count=$((line_count + 1))
+      printf '%s[%s] %s\n' "$prefix" "$mark" "${options[$i]}" >&2
     done
-    printf '  %sUse ↑/↓ to move, Space to select, Enter to confirm%s\n' "$DIM" "$RESET"
-    line_count=$((line_count + 1))
+    note "Use ↑/↓ to move, Space to select, Enter to confirm"
 
     read_key || continue
     key="$REPLY"
@@ -253,14 +273,15 @@ select_one() {
     shift
   done
 
-  if [[ ! -t 0 || ! -t 1 || ${#options[@]} -eq 0 ]]; then
+  if [[ ${#options[@]} -eq 0 ]] || ! _menu_can_interact; then
     local i choice
     say "$prompt"
     for i in "${!options[@]}"; do
       note "  $((i + 1)). ${options[$i]}"
     done
     printf '  %s> %s' "$BOLD" "$RESET"
-    read -r choice || true
+    _menu_read_line || true
+    choice="${REPLY:-}"
     if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
       printf -v "$out_name" '%s' "${options[$((choice - 1))]}"
     elif [[ -n "$choice" ]]; then
@@ -284,23 +305,16 @@ select_one() {
   trap '_menu_show_cursor' RETURN
 
   while true; do
-    if (( line_count > 0 )); then
-      _menu_clear_lines "$line_count"
-    fi
-    line_count=0
-
-    printf '  %s%s%s\n' "$BOLD" "$prompt" "$RESET"
-    line_count=$((line_count + 1))
+    ui_header_refresh "${_WIZARD_HEADER_TITLE:-Choose}"
+    say "$prompt"
     for i in "${!options[@]}"; do
       local prefix="  "
       [[ $i -eq $cursor ]] && prefix="${BLUE}> "
       local marker=" "
       [[ $i -eq $cursor ]] && marker="•"
-      printf '%s%s %s\n' "$prefix" "$marker" "${options[$i]}"
-      line_count=$((line_count + 1))
+      printf '%s%s %s\n' "$prefix" "$marker" "${options[$i]}" >&2
     done
-    printf '  %sUse ↑/↓ to move, Enter to confirm%s\n' "$DIM" "$RESET"
-    line_count=$((line_count + 1))
+    note "Use ↑/↓ to move, Enter to confirm"
 
     read_key || continue
     key="$REPLY"
@@ -340,7 +354,7 @@ select_one_framed() {
     shift
   done
 
-  if [[ ! -t 0 || ! -t 1 || ${#options[@]} -eq 0 ]]; then
+  if [[ ${#options[@]} -eq 0 ]] || ! _menu_can_interact; then
     "$redraw_fn"
     note ""
     local i choice
@@ -348,7 +362,8 @@ select_one_framed() {
       note "  $((i + 1)). ${options[$i]}"
     done
     printf '  %s> %s' "$BOLD" "$RESET"
-    read -r choice || true
+    _menu_read_line || true
+    choice="${REPLY:-}"
     if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#options[@]} )); then
       printf -v "$out_name" '%s' "${options[$((choice - 1))]}"
     elif [[ -n "$choice" ]]; then
@@ -508,6 +523,8 @@ install_app_dependencies() {
     step "Running pnpm install…"
     pnpm install
   fi
+  # Native SQLite addon must match this Node (pnpm install often skips the binary).
+  pnpm rebuild better-sqlite3 >/dev/null 2>&1 || true
 }
 
 finish() {
@@ -557,6 +574,61 @@ export TOTAL_STAGES="${TOTAL_STAGES:-10}"
 wizard_ui_init
 
 cmd_exists() { command -v "$1" >/dev/null 2>&1; }
+
+export PATH="${HOME}/.local/bin:${HOME}/.kimi-code/bin:${HOME}/.grok/bin:${PATH}"
+
+cli_extra_bin() {
+  case "$1" in
+    claude) printf '%s' "${HOME}/.local/bin/claude" ;;
+    codex) printf '%s' "${HOME}/.local/bin/codex" ;;
+    kimi) printf '%s' "${HOME}/.kimi-code/bin/kimi" ;;
+    grok) printf '%s' "${HOME}/.grok/bin/grok" ;;
+    *) return 1 ;;
+  esac
+}
+
+cli_bin() {
+  local name="$1" extra
+  extra="$(cli_extra_bin "$name" || true)"
+  if cmd_exists "$name"; then
+    command -v "$name"
+    return 0
+  fi
+  if [[ -n "$extra" && -x "$extra" ]]; then
+    printf '%s' "$extra"
+    return 0
+  fi
+  return 1
+}
+
+grok_bin() { cli_bin grok; }
+
+ensure_agent_cli() {
+  local id="$1" name="$2" note="$3" manual="$4"
+  local extra
+  extra="$(cli_extra_bin "$id")"
+  export PATH="$(dirname "$extra"):${PATH}"
+  if cli_bin "$id" >/dev/null; then
+    printf '  %s✓ %s is installed%s\n' "$GREEN" "$name" "$RESET"
+    return 0
+  fi
+  say "NEXT: Install ${name} with the official installer — no sudo."
+  [[ -n "$note" ]] && note "$note"
+  pause "Press Enter to install ${name}"
+  step "Running scripts/install-agent-cli.sh ${id}…"
+  if bash "${_WIZARD_DIR}/install-agent-cli.sh" "$id"; then
+    export PATH="$(dirname "$extra"):${PATH}"
+    hash -r 2>/dev/null || true
+    if cli_bin "$id" >/dev/null; then
+      ok_msg "${name} is installed"
+      return 0
+    fi
+  fi
+  warn "${name} is not installed yet."
+  note "You can install it yourself: ${manual}"
+  SKIPPED+=("Install ${name} — ${manual}")
+  return 1
+}
 
 node_major_version() {
   node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo 0
@@ -611,19 +683,36 @@ git_manual_install_hint() {
 }
 
 check_claude_login() {
-  cmd_exists claude || return 1
-  claude auth status 2>/dev/null | grep -q '"loggedIn"[[:space:]]*:[[:space:]]*true'
+  local bin
+  bin="$(cli_bin claude || true)"
+  [[ -n "$bin" ]] || return 1
+  "$bin" auth status 2>/dev/null | grep -q '"loggedIn"[[:space:]]*:[[:space:]]*true'
 }
 
 check_codex_login() {
-  cmd_exists codex || return 1
-  codex login status 2>&1 | grep -qi 'logged in'
+  local bin
+  bin="$(cli_bin codex || true)"
+  [[ -n "$bin" ]] || return 1
+  "$bin" login status 2>&1 | grep -qi 'logged in'
 }
 
 check_kimi_login() {
-  cmd_exists kimi || return 1
+  local bin
+  bin="$(cli_bin kimi || true)"
+  [[ -n "$bin" ]] || return 1
   [[ -d "${HOME}/.kimi-code/credentials" ]] || return 1
   [[ -n "$(ls -A "${HOME}/.kimi-code/credentials" 2>/dev/null || true)" ]]
+}
+
+check_grok_login() {
+  local bin
+  bin="$(grok_bin || true)"
+  [[ -n "$bin" ]] || return 1
+  if "$bin" login status >/dev/null 2>&1; then
+    "$bin" login status 2>&1 | grep -qiE 'logged in|authenticated|signed in'
+    return $?
+  fi
+  [[ -f "${HOME}/.grok/auth.json" ]]
 }
 
 guide_login() {
@@ -687,6 +776,10 @@ models_step_draw() {
     ok_msg "Kimi — ${MODEL_KIMI}"
     any_done=true
   fi
+  if $USE_GROK && [[ -n "${MODEL_GROK:-}" ]]; then
+    ok_msg "Grok — ${MODEL_GROK}"
+    any_done=true
+  fi
 
   if [[ -n "${PICK_AGENT:-}" ]]; then
     note ""
@@ -718,7 +811,12 @@ pick_model() {
   fi
 
   PICK_AGENT="$agent"
-  select_one_framed "$var_name" models_step_draw "${default_args[@]}" -- "${options[@]}"
+  # Empty arrays are unbound under `set -u` on macOS bash 3.2.
+  if (( ${#default_args[@]} )); then
+    select_one_framed "$var_name" models_step_draw "${default_args[@]}" -- "${options[@]}"
+  else
+    select_one_framed "$var_name" models_step_draw -- "${options[@]}"
+  fi
   PICK_AGENT=""
 }
 
@@ -726,11 +824,11 @@ write_preferences_json() {
   local agents_csv="$1"
   mkdir -p "$(dirname "$PREFS_JSON")"
   node - "$PREFS_JSON" "$agents_csv" \
-    "${MODEL_CLAUDE:-}" "${MODEL_CODEX:-}" "${MODEL_KIMI:-}" <<'NODE'
+    "${MODEL_CLAUDE:-}" "${MODEL_CODEX:-}" "${MODEL_KIMI:-}" "${MODEL_GROK:-}" <<'NODE'
 const fs = require('node:fs');
-const [path, agentsCsv, claude, codex, kimi] = process.argv.slice(2);
+const [path, agentsCsv, claude, codex, kimi, grok] = process.argv.slice(2);
 const models = {};
-for (const [agent, value] of [['claude', claude], ['codex', codex], ['kimi', kimi]]) {
+for (const [agent, value] of [['claude', claude], ['codex', codex], ['kimi', kimi], ['grok', grok]]) {
   if (value) models[agent] = value;
 }
 const agents = agentsCsv.split(',').map((s) => s.trim()).filter(Boolean);
@@ -826,6 +924,8 @@ if ! install_app_dependencies; then
   warn "Download failed. Check your internet connection and try again."
   exit 1
 fi
+step "Building shared types…"
+pnpm --filter @realtor-os/contracts build >/dev/null 2>&1 || true
 mkdir -p "${REALTOR_DATA_DIR}/pnpm-store" "${PNPM_HOME}"
 pnpm config set store-dir "${REALTOR_DATA_DIR}/pnpm-store" 2>/dev/null || true
 printf '  %s✓ App is ready%s\n' "$GREEN" "$RESET"
@@ -851,11 +951,11 @@ pause "Press Enter to continue"
 stage "Which AI assistants do you use?"
 say "NEXT: Tell us which AI tools you already have on this Mac."
 say "RealtorOS connects to assistants you installed separately"
-say "(Claude Code, OpenAI Codex, or Kimi). Pick at least one."
+say "(Claude Code, OpenAI Codex, Kimi, or Grok Build). Pick at least one."
 note ""
 
-ASSISTANT_LABELS=("Claude (by Anthropic)" "Codex (by OpenAI / ChatGPT)" "Kimi (by Moonshot)")
-ASSISTANT_IDS=("claude" "codex" "kimi")
+ASSISTANT_LABELS=("Claude (by Anthropic)" "Codex (by OpenAI / ChatGPT)" "Kimi (by Moonshot)" "Grok Build (by xAI)")
+ASSISTANT_IDS=("claude" "codex" "kimi" "grok")
 
 DEFAULT_ASSISTANT_IDXS=()
 saved_agents=$(_existing REALTOR_SELECTED_AGENTS || true)
@@ -884,6 +984,7 @@ fi
 USE_CLAUDE=false
 USE_CODEX=false
 USE_KIMI=false
+USE_GROK=false
 SELECTED_AGENTS=()
 
 for idx in "${SELECTED_IDXS[@]}"; do
@@ -891,10 +992,11 @@ for idx in "${SELECTED_IDXS[@]}"; do
     claude) USE_CLAUDE=true; SELECTED_AGENTS+=("claude") ;;
     codex) USE_CODEX=true; SELECTED_AGENTS+=("codex") ;;
     kimi) USE_KIMI=true; SELECTED_AGENTS+=("kimi") ;;
+    grok) USE_GROK=true; SELECTED_AGENTS+=("grok") ;;
   esac
 done
 
-if ! $USE_CLAUDE && ! $USE_CODEX && ! $USE_KIMI; then
+if ! $USE_CLAUDE && ! $USE_CODEX && ! $USE_KIMI && ! $USE_GROK; then
   warn "Please pick at least one assistant to continue."
   exit 1
 fi
@@ -904,28 +1006,31 @@ write_env REALTOR_SELECTED_AGENTS "$AGENTS_CSV"
 say "Great — you picked: ${AGENTS_CSV}"
 pause "Press Enter to continue"
 
-# ── 4. Verify CLI tools are installed ─────────────────────────────────────
-stage "Checking your AI apps are installed"
-say "Each AI assistant needs its own app installed on your computer."
-say "Let's make sure you have the ones you picked."
-
-verify_cli() {
-  local name="$1" cmd="$2" url="$3"
-  if cmd_exists "$cmd"; then
-    printf '  %s✓ %s is installed%s\n' "$GREEN" "$name" "$RESET"
-    return 0
-  fi
-  warn "${name} doesn't seem to be installed yet."
-  open_url "$url"
-  step "Follow the install guide on that page, then run this setup again."
-  SKIPPED+=("Install ${name} — see ${url}")
-  return 1
-}
+# ── 4. Install the AI CLIs you picked ─────────────────────────────────────
+stage "Installing your AI apps"
+say "For each assistant you picked, we run the official installer if it is missing."
 
 CLI_OK=true
-$USE_CLAUDE && verify_cli "Claude Code" claude "https://docs.anthropic.com/en/docs/claude-code/overview" || CLI_OK=false
-$USE_CODEX && verify_cli "Codex" codex "https://developers.openai.com/codex/cli/" || CLI_OK=false
-$USE_KIMI && verify_cli "Kimi" kimi "https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started.html" || CLI_OK=false
+if $USE_CLAUDE; then
+  ensure_agent_cli "claude" "Claude Code" \
+    "Sign in later with a Claude account." \
+    "curl -fsSL https://claude.ai/install.sh | bash" || CLI_OK=false
+fi
+if $USE_CODEX; then
+  ensure_agent_cli "codex" "Codex" \
+    "Sign in later with ChatGPT." \
+    "curl -fsSL https://chatgpt.com/codex/install.sh | sh" || CLI_OK=false
+fi
+if $USE_KIMI; then
+  ensure_agent_cli "kimi" "Kimi" \
+    "Sign in later with a Kimi account." \
+    "curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash" || CLI_OK=false
+fi
+if $USE_GROK; then
+  ensure_agent_cli "grok" "Grok Build" \
+    "Needs a SuperGrok or X Premium Plus account to sign in later." \
+    "curl -fsSL https://x.ai/cli/install.sh | bash" || CLI_OK=false
+fi
 
 if ! $CLI_OK; then
   warn "Install what's missing above, then run this setup again."
@@ -943,6 +1048,7 @@ LOGIN_OK=true
 $USE_CLAUDE && guide_login "Claude" "claude auth login" check_claude_login || LOGIN_OK=false
 $USE_CODEX && guide_login "Codex" "codex login" check_codex_login || LOGIN_OK=false
 $USE_KIMI && guide_login "Kimi" "kimi login" check_kimi_login || LOGIN_OK=false
+$USE_GROK && guide_login "Grok" "grok login" check_grok_login || LOGIN_OK=false
 
 if ! $LOGIN_OK; then
   warn "Please complete sign-in above, then run this setup again:"
@@ -958,6 +1064,7 @@ stage "Pick your default AI models"
 MODEL_CLAUDE=""
 MODEL_CODEX=""
 MODEL_KIMI=""
+MODEL_GROK=""
 
 if $USE_CLAUDE; then
   pick_model "Claude" MODEL_CLAUDE default sonnet opus haiku
@@ -970,6 +1077,10 @@ fi
 if $USE_KIMI; then
   pick_model "Kimi" MODEL_KIMI default kimi-k2-turbo-preview moonshot-v1-8k
   write_env_quiet REALTOR_MODEL_KIMI "$MODEL_KIMI"
+fi
+if $USE_GROK; then
+  pick_model "Grok" MODEL_GROK grok-4.6 default grok-build-0.1 grok-4.5 grok-4.3
+  write_env_quiet REALTOR_MODEL_GROK "$MODEL_GROK"
 fi
 
 _clear
@@ -987,6 +1098,7 @@ note ""
 $USE_CLAUDE && note "  Claude — model: ${MODEL_CLAUDE:-default}"
 $USE_CODEX && note "  Codex — model: ${MODEL_CODEX:-default}"
 $USE_KIMI && note "  Kimi — model: ${MODEL_KIMI:-default}"
+$USE_GROK && note "  Grok — model: ${MODEL_GROK:-grok-4.6}"
 note ""
 say "Desktop shortcut"
 say "NEXT: We can add a RealtorOS icon to your Desktop."

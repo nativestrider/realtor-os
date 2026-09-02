@@ -260,12 +260,14 @@ function Print-NextSteps {
     Write-Host "  cd `"$InstallDir`""
     Write-Host '  pnpm dev'
     Write-Host ''
-    Write-Host 'Install & sign in to at least one AI CLI:'
-    Write-Host '  Claude  https://docs.anthropic.com/en/docs/claude-code/overview'
-    Write-Host '  Codex   https://developers.openai.com/codex/cli/'
-    Write-Host '  Kimi    https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started.html'
+    Write-Host 'The bash wizard installs the CLIs you pick. Without Git Bash, run:'
+    Write-Host '  Claude  irm https://claude.ai/install.ps1 | iex'
+    Write-Host '  Codex   irm https://chatgpt.com/codex/install.ps1 | iex'
+    Write-Host '  Kimi    irm https://code.kimi.com/kimi-code/install.ps1 | iex'
+    Write-Host '  Grok    irm https://x.ai/cli/install.ps1 | iex'
     Write-Host ''
     Write-Host 'Codex (ChatGPT): use model GPT-5.4 in the app.'
+    Write-Host 'Grok Build: use model Grok 4.6 in the app.'
 }
 
 # ── Main ────────────────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ export interface AcpRunOptions {
   resumeSessionId?: string | null;
   onEvent: (event: RunEvent) => void;
   signal?: AbortSignal;
+  authLoginHint?: string;
 }
 
 export async function runAcpSession(options: AcpRunOptions): Promise<{ sessionId?: string }> {
@@ -26,6 +27,8 @@ export async function runAcpSession(options: AcpRunOptions): Promise<{ sessionId
 
   let capturedSessionId: string | undefined = resumeSessionId ?? undefined;
   let activeSessionId: string | null = null;
+  /** `nextUpdate()` already consumes `session/update`; skip the raw notification then. */
+  let drivenByNextUpdate = false;
 
   const abortPromise = new Promise<never>((_, reject) => {
     if (!signal) return;
@@ -57,6 +60,7 @@ export async function runAcpSession(options: AcpRunOptions): Promise<{ sessionId
       return {};
     })
     .onNotification(acp.methods.client.session.update, (ctx) => {
+      if (drivenByNextUpdate) return;
       if (activeSessionId && ctx.params.sessionId === activeSessionId) {
         handleSessionUpdate(ctx.params.update, onEvent);
       }
@@ -88,6 +92,7 @@ export async function runAcpSession(options: AcpRunOptions): Promise<{ sessionId
         return;
       }
 
+      drivenByNextUpdate = true;
       await ctx.buildSession(cwd).withSession(async (session) => {
         activeSessionId = session.sessionId;
         capturedSessionId = session.sessionId;
@@ -103,10 +108,11 @@ export async function runAcpSession(options: AcpRunOptions): Promise<{ sessionId
       throw err;
     }
     if (message.includes('AUTH_REQUIRED') || message.includes('-32000')) {
+      const login = options.authLoginHint ?? 'the agent CLI login command';
       onEvent({
         type: 'error',
         code: 'AUTH_REQUIRED',
-        message: 'Authentication required. Run `kimi login` in your terminal.',
+        message: `Authentication required. Run \`${login}\` in your terminal.`,
       });
       throw err;
     }

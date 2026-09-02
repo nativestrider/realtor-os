@@ -19,7 +19,7 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^1.4.0",
     "@realtor-os/contracts": "workspace:*",
-    "better-sqlite3": "^11.9.0",
+    "better-sqlite3": "^12.11.1",
     "busboy": "^1.6.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",

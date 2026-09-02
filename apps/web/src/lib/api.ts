@@ -221,6 +221,33 @@ export async function importFromFolder(files: FileList): Promise<Property> {
   return data.property;
 }
 
+export async function importCompsFolder(
+  propertyId: string,
+  files: FileList,
+): Promise<{ property: Property; filesWritten: number }> {
+  const token = getApiToken();
+  const formData = new FormData();
+  let queued = 0;
+  for (const file of Array.from(files)) {
+    if (!file.name.toLowerCase().endsWith('.json')) continue;
+    formData.append('files', file, `comps/${file.name}`);
+    queued += 1;
+  }
+  if (queued === 0) {
+    throw new Error('Choose a folder with comparable JSON files.');
+  }
+  const res = await fetch(`/api/properties/${propertyId}/import-folder`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || res.statusText);
+  }
+  return (await res.json()) as { property: Property; filesWritten: number };
+}
+
 export async function importFolderToProperty(propertyId: string, files: FileList): Promise<Property> {
   const token = getApiToken();
   const formData = new FormData();

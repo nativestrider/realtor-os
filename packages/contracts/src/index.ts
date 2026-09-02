@@ -1,4 +1,4 @@
-export type AgentId = 'claude' | 'codex' | 'kimi';
+export type AgentId = 'claude' | 'codex' | 'kimi' | 'grok';
 
 export type StreamFormat = 'claude-stream-json' | 'json-event-stream' | 'acp';
 
@@ -29,10 +29,15 @@ export interface RunEvent {
   status?: string;
 }
 
+export type AgentCapability = 'chat' | 'vision' | 'imageGeneration';
+
 export interface ModelOption {
   id: string;
   label: string;
+  capabilities?: AgentCapability[];
 }
+
+export type AgentRuntimeStatus = 'not_installed' | 'needs_login' | 'ready';
 
 export interface DetectedAgent {
   id: AgentId;
@@ -40,6 +45,16 @@ export interface DetectedAgent {
   available: boolean;
   version?: string;
   models: ModelOption[];
+  /** What this CLI can do today. From the living catalog — not probed at runtime. */
+  capabilities: AgentCapability[];
+  /** Image model the CLI uses when `imageGeneration` is set (e.g. gpt-image-2). */
+  imageModel?: string;
+  /** Combined install + login state for Settings. */
+  status: AgentRuntimeStatus;
+  signedIn: boolean;
+  accountLabel?: string;
+  loginHint?: string;
+  installHint?: string;
 }
 
 export interface Conversation {
@@ -88,3 +103,4 @@ export * from './comparable.js';
 export * from './user-settings.js';
 export * from './media.js';
 export * from './listing.js';
+export * from './actions.js';

@@ -1,10 +1,10 @@
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { ModelOption } from '@realtor-os/contracts';
 import type { RuntimeAgentDef } from './types.js';
+import { DEFAULT_MODEL_OPTION, modelsForAgent } from './capabilities.js';
 
-export const DEFAULT_MODEL_OPTION: ModelOption = {
-  id: 'default',
-  label: 'Default',
-};
+export { DEFAULT_MODEL_OPTION } from './capabilities.js';
 
 export function detectModelsFromStdout(stdout: string, fallback: ModelOption[]): ModelOption[] {
   const lines = stdout.split(/\r?\n/u).map((l) => l.trim()).filter(Boolean);
@@ -45,8 +45,6 @@ export function buildClaudeArgs(
 ): string[] {
   const args = [
     '-p',
-    '--input-format',
-    'stream-json',
     '--output-format',
     'stream-json',
     '--verbose',
@@ -56,9 +54,11 @@ export function buildClaudeArgs(
   if (options.model && options.model !== 'default') {
     args.push('--model', options.model);
   }
-  if (runtimeContext.resumeSessionId) {
-    args.push('--resume', runtimeContext.resumeSessionId);
-  } else if (runtimeContext.newSessionId) {
+  // Never --resume in print mode. A native session that already contains
+  // assistant turns is replayed as stream-json and Claude exits with
+  // "Expected message role 'user', got 'assistant'". Prior chat is inlined
+  // in the composed prompt instead.
+  if (!runtimeContext.resumeSessionId && runtimeContext.newSessionId) {
     args.push('--session-id', runtimeContext.newSessionId);
   }
   return args;
@@ -101,37 +101,42 @@ export function buildCodexArgs(
   return args;
 }
 
+export function buildGrokArgs(
+  _prompt: string,
+  options: { model?: string } = {},
+): string[] {
+  const args = ['agent', '--always-approve', '--no-leader'];
+  if (options.model && options.model !== 'default') {
+    args.push('--model', options.model);
+  }
+  args.push('stdio');
+  return args;
+}
+
 export const claudeAgentDef = {
   id: 'claude',
   name: 'Claude Code',
   bin: 'claude',
-  fallbackBins: ['openclaude'],
+  fallbackBins: ['openclaude', join(homedir(), '.local', 'bin', 'claude')],
   versionArgs: ['--version'],
-  fallbackModels: [
-    DEFAULT_MODEL_OPTION,
-    { id: 'sonnet', label: 'Sonnet' },
-    { id: 'opus', label: 'Opus' },
-    { id: 'haiku', label: 'Haiku' },
-  ],
+  fallbackModels: modelsForAgent('claude'),
   buildArgs: (prompt, options, runtimeContext) =>
     buildClaudeArgs(prompt, options, runtimeContext ?? {}),
   promptViaStdin: true,
-  promptInputFormat: 'stream-json',
+  promptInputFormat: 'text',
   streamFormat: 'claude-stream-json',
-  resumesSessionViaCli: true,
+  resumesSessionViaCli: false,
+  authLoginHint: 'claude auth login',
+  installHint: 'bash scripts/install-agent-cli.sh claude',
 } satisfies RuntimeAgentDef;
 
 export const codexAgentDef = {
   id: 'codex',
   name: 'Codex CLI',
   bin: 'codex',
+  fallbackBins: [join(homedir(), '.local', 'bin', 'codex')],
   versionArgs: ['--version'],
-  fallbackModels: [
-    { id: 'gpt-5.4', label: 'GPT-5.4 (ChatGPT)' },
-    DEFAULT_MODEL_OPTION,
-    { id: 'gpt-5.3-codex', label: 'gpt-5.3-codex (API)' },
-    { id: 'o4-mini', label: 'o4-mini (API)' },
-  ],
+  fallbackModels: modelsForAgent('codex'),
   buildArgs: (prompt, options, runtimeContext) =>
     buildCodexArgs(prompt, options, runtimeContext ?? {}),
   promptViaStdin: true,
@@ -139,18 +144,33 @@ export const codexAgentDef = {
   eventParser: 'codex',
   resumesSessionViaCli: true,
   capturesSessionIdFromStream: true,
+  authLoginHint: 'codex login',
+  installHint: 'bash scripts/install-agent-cli.sh codex',
 } satisfies RuntimeAgentDef;
 
 export const kimiAgentDef = {
   id: 'kimi',
   name: 'Kimi CLI',
   bin: 'kimi',
+  fallbackBins: [join(homedir(), '.kimi-code', 'bin', 'kimi')],
   versionArgs: ['--version'],
-  fallbackModels: [
-    DEFAULT_MODEL_OPTION,
-    { id: 'kimi-k2-turbo-preview', label: 'kimi-k2-turbo-preview' },
-    { id: 'moonshot-v1-8k', label: 'moonshot-v1-8k' },
-  ],
+  fallbackModels: modelsForAgent('kimi'),
   buildArgs: () => ['acp'],
   streamFormat: 'acp',
+  authLoginHint: 'kimi login',
+  installHint: 'bash scripts/install-agent-cli.sh kimi',
+} satisfies RuntimeAgentDef;
+
+export const grokAgentDef = {
+  id: 'grok',
+  name: 'Grok Build',
+  bin: 'grok',
+  fallbackBins: [join(homedir(), '.grok', 'bin', 'grok')],
+  versionArgs: ['--version'],
+  fallbackModels: modelsForAgent('grok'),
+  buildArgs: (prompt, options) => buildGrokArgs(prompt, options ?? {}),
+  streamFormat: 'acp',
+  resumesSessionViaCli: true,
+  authLoginHint: 'grok login',
+  installHint: 'bash scripts/install-agent-cli.sh grok',
 } satisfies RuntimeAgentDef;

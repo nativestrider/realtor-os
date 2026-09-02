@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { AgentId, ChatMessage, Conversation, DetectedAgent, RunEvent, SkillSummary } from '@realtor-os/contracts';
-import { buildActionMessage, getSkillCommandLabel } from '@/components/ActionGrid';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import type { AgentId, ChatMessage, Conversation, DetectedAgent, RunEvent } from '@realtor-os/contracts';
+import { actionAllowsSelection, formatAllowedAgents } from '@realtor-os/contracts';
 import {
   cancelRun,
   createConversation,
@@ -10,14 +10,14 @@ import {
   fetchAgents,
   fetchConversations,
   fetchMessages,
-  fetchSkills,
   getApiToken,
   streamChat,
   updateConversationAgent,
 } from '@/lib/api';
+import { ChatMarkdown } from '@/components/ChatMarkdown';
 import { formatAgentActivity } from '@/lib/agent-activity';
+import { partitionAssistantText } from '@/lib/assistant-text';
 
-const LONG_MESSAGE_CHARS = 900;
 const INPUT_MAX_HEIGHT = 120;
 
 type UiMessage = ChatMessage & {
@@ -26,62 +26,70 @@ type UiMessage = ChatMessage & {
   error?: string;
 };
 
+export type PropertyChatHandle = {
+  runSkill: (skillId: string, message: string) => Promise<void>;
+};
+
 interface PropertyChatProps {
   propertyId: string;
   propertyLabel: string;
-  zillowUrl?: string;
-  hasPhotos?: boolean;
-  hasPropertyJson?: boolean;
   onStatusChange?: (status: string) => void;
+  onRunningChange?: (running: boolean) => void;
   onRunFinished?: () => void;
+  onSelectionChange?: (selection: { agentId: AgentId; model: string; agents: DetectedAgent[] }) => void;
+}
+
+function ThinkingBlock({ text, live }: { text: string; live?: boolean }) {
+  return (
+    <details className="thinking-disclosure" open={live}>
+      <summary>{live ? 'Thinking…' : 'Thinking'}</summary>
+      <div className="thinking-text">{text}</div>
+    </details>
+  );
 }
 
 function ChatMessageBubble({ message }: { message: UiMessage }) {
-  const [expanded, setExpanded] = useState(false);
-  const content = message.content ?? '';
-  const isLong = !message.streaming && content.length > LONG_MESSAGE_CHARS;
-  const visibleContent = isLong && !expanded ? `${content.slice(0, LONG_MESSAGE_CHARS)}…` : content;
+  const raw = message.content ?? '';
+  const parts =
+    message.role === 'assistant' && !message.error
+      ? partitionAssistantText(raw)
+      : { thinking: '', content: raw };
+  const thinking = [message.thinking?.trim(), parts.thinking].filter(Boolean).join('\n\n');
+  const content = message.role === 'assistant' && !message.error ? parts.content : raw;
+  const showPlaceholder = message.streaming && !thinking && !content;
+  const useMarkdown = Boolean(content) && !message.error;
 
   return (
     <div className={`message ${message.error ? 'error' : message.role}`}>
-      {visibleContent || (message.streaming && !message.thinking ? '…' : '')}
-      {message.thinking && !message.content ? (
-        <div className="thinking-text">{message.thinking}</div>
-      ) : null}
-      {message.error ? `\n${message.error}` : null}
-      {isLong ? (
-        <button
-          type="button"
-          className="message-expand-btn"
-          onClick={() => setExpanded((v) => !v)}
-        >
-          {expanded ? 'Show less' : 'Show full message'}
-        </button>
-      ) : null}
+      {thinking ? <ThinkingBlock text={thinking} live={message.streaming && !content} /> : null}
+      {useMarkdown ? <ChatMarkdown>{content}</ChatMarkdown> : null}
+      {showPlaceholder ? '…' : null}
+      {message.error ? message.error : null}
     </div>
   );
 }
 
-export function PropertyChat({
-  propertyId,
-  propertyLabel,
-  zillowUrl,
-  hasPhotos,
-  hasPropertyJson,
-  onStatusChange,
-  onRunFinished,
-}: PropertyChatProps) {
+export const PropertyChat = forwardRef<PropertyChatHandle, PropertyChatProps>(function PropertyChat(
+  {
+    propertyId,
+    propertyLabel,
+    onStatusChange,
+    onRunningChange,
+    onRunFinished,
+    onSelectionChange,
+  },
+  ref,
+) {
   const [agents, setAgents] = useState<DetectedAgent[]>([]);
-  const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<UiMessage[]>([]);
   const [input, setInput] = useState('');
   const [selectedAgent, setSelectedAgent] = useState<AgentId>('claude');
   const [selectedModel, setSelectedModel] = useState('default');
-  const [selectedCommand, setSelectedCommand] = useState('');
   const [running, setRunning] = useState(false);
   const [activityLabel, setActivityLabel] = useState('');
+  const [activeSkillId, setActiveSkillId] = useState('');
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
   const [agentNotice, setAgentNotice] = useState<string | null>(null);
   const [memoryNotice, setMemoryNotice] = useState<string | null>(null);
@@ -93,14 +101,14 @@ export function PropertyChat({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
+  const syncedThreadId = useRef<string | null>(null);
+  const userPickedAgent = useRef(false);
 
-  const availableAgents = useMemo(() => agents.filter((a) => a.available), [agents]);
   const propertyConversations = useMemo(
     () => conversations.filter((c) => c.propertyId === propertyId),
     [conversations, propertyId],
   );
   const currentAgent = agents.find((a) => a.id === selectedAgent);
-  const commandSkill = skills.find((s) => s.id === selectedCommand);
 
   const resizeInput = useCallback(() => {
     const el = inputRef.current;
@@ -151,17 +159,16 @@ export function PropertyChat({
       const gpt54 = agent.models.find((m) => m.id === 'gpt-5.4');
       if (gpt54) return gpt54.id;
     }
+    if (agent.id === 'grok') {
+      const grok46 = agent.models.find((m) => m.id === 'grok-4.6');
+      if (grok46) return grok46.id;
+    }
     return agent.models[0]?.id ?? 'default';
   };
 
   const loadAgents = useCallback(async () => {
     const list = await fetchAgents();
     setAgents(list);
-    const pick = list.find((a) => a.available);
-    if (pick) {
-      setSelectedAgent(pick.id);
-      setSelectedModel(pickDefaultModel(pick));
-    }
   }, []);
 
   const loadConversations = useCallback(async () => {
@@ -181,7 +188,6 @@ export function PropertyChat({
   useEffect(() => {
     if (!getApiToken()) return;
     void loadAgents();
-    void fetchSkills().then(setSkills);
   }, [loadAgents]);
 
   useEffect(() => {
@@ -193,36 +199,35 @@ export function PropertyChat({
   }, [activeId, loadMessages]);
 
   useEffect(() => {
-    if (!activeId) return;
+    if (!activeId) {
+      syncedThreadId.current = null;
+      if (userPickedAgent.current) return;
+      const pick = agents.find((a) => a.available);
+      if (pick) {
+        setSelectedAgent(pick.id);
+        setSelectedModel(pickDefaultModel(pick));
+      }
+      return;
+    }
+    if (syncedThreadId.current === activeId) return;
     const conv = conversations.find((c) => c.id === activeId);
     if (!conv) return;
+    syncedThreadId.current = activeId;
     setSelectedAgent(conv.agentId);
     setSelectedModel(conv.model);
-  }, [activeId, conversations]);
+  }, [activeId, conversations, agents]);
 
-  function handleCommandChange(skillId: string) {
-    setSelectedCommand(skillId);
-    if (!skillId) return;
-    const skill = skills.find((s) => s.id === skillId);
-    if (!skill) return;
-    setInput(
-      buildActionMessage(skill, {
-        zillowUrl,
-        hasPhotos,
-        hasPropertyJson,
-      }),
-    );
-    inputRef.current?.focus();
-  }
+  useEffect(() => {
+    onSelectionChange?.({ agentId: selectedAgent, model: selectedModel, agents });
+  }, [selectedAgent, selectedModel, agents, onSelectionChange]);
 
   async function handleAgentChange(nextAgentId: AgentId) {
     const agent = agents.find((a) => a.id === nextAgentId);
-    const nextModel =
-      nextAgentId === 'codex'
-        ? (agent?.models.find((m) => m.id === 'gpt-5.4')?.id ?? agent?.models[0]?.id ?? 'default')
-        : (agent?.models[0]?.id ?? 'default');
+    const nextModel = agent ? pickDefaultModel(agent) : 'default';
+    userPickedAgent.current = true;
     setSelectedAgent(nextAgentId);
     setSelectedModel(nextModel);
+    onSelectionChange?.({ agentId: nextAgentId, model: nextModel, agents });
 
     if (activeId) {
       try {
@@ -242,6 +247,7 @@ export function PropertyChat({
 
   async function handleModelChange(nextModel: string) {
     setSelectedModel(nextModel);
+    onSelectionChange?.({ agentId: selectedAgent, model: nextModel, agents });
     if (activeId) {
       try {
         const updated = await updateConversationAgent(activeId, {
@@ -264,11 +270,11 @@ export function PropertyChat({
       title: propertyLabel.slice(0, 60) || 'Property chat',
     });
     setConversations((prev) => [conversation, ...prev]);
+    syncedThreadId.current = conversation.id;
     setActiveId(conversation.id);
     setMessages([]);
     setAgentNotice(null);
     setMemoryNotice(null);
-    setSelectedCommand('');
     stickToBottomRef.current = true;
   }
 
@@ -281,6 +287,7 @@ export function PropertyChat({
       title: propertyLabel.slice(0, 60) || 'Property chat',
     });
     setConversations((prev) => [conversation, ...prev]);
+    syncedThreadId.current = conversation.id;
     setActiveId(conversation.id);
     return conversation.id;
   }
@@ -306,11 +313,14 @@ export function PropertyChat({
     }
   }
 
-  async function handleSend() {
-    if (!input.trim() || running) return;
+  function setLiveActivity(label: string) {
+    setActivityLabel(label);
+    onStatusChange?.(label);
+  }
+
+  async function sendMessage(outgoing: string, skillId?: string) {
+    if (!outgoing.trim() || running) return;
     const conversationId = await ensureConversation();
-    const skillId = selectedCommand || undefined;
-    const outgoing = input.trim();
     stickToBottomRef.current = true;
 
     const userMessage: UiMessage = {
@@ -322,6 +332,12 @@ export function PropertyChat({
     };
 
     const assistantId = crypto.randomUUID();
+    const startLabel =
+      skillId === 'zillow-import'
+        ? 'Starting Zillow import…'
+        : skillId === 'zillow-comp'
+          ? 'Starting comparable import…'
+          : 'Starting…';
     const assistantMessage: UiMessage = {
       id: assistantId,
       conversationId,
@@ -333,17 +349,16 @@ export function PropertyChat({
 
     setMessages((prev) => [...prev, userMessage, assistantMessage]);
     setInput('');
-    setSelectedCommand('');
+    setActiveSkillId(skillId ?? '');
     setRunning(true);
-    setActivityLabel('Starting…');
-    onStatusChange?.('Starting...');
+    onRunningChange?.(true);
+    setActivityLabel(startLabel);
+    onStatusChange?.(startLabel);
 
     const handleEvent = (event: RunEvent, runId?: string) => {
       if (runId) setCurrentRunId(runId);
       if (event.type === 'status' && event.status) {
-        const label = formatAgentActivity({ status: event.status });
-        setActivityLabel(label);
-        onStatusChange?.(label);
+        setLiveActivity(formatAgentActivity({ status: event.status, skillId }));
       }
       if (event.type === 'text_delta' && event.text) {
         setMessages((prev) =>
@@ -351,9 +366,7 @@ export function PropertyChat({
         );
       }
       if (event.type === 'thinking_delta' && event.text) {
-        const label = formatAgentActivity({ thinking: true });
-        setActivityLabel(label);
-        onStatusChange?.(label);
+        setLiveActivity(formatAgentActivity({ thinking: true, skillId }));
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId ? { ...m, thinking: (m.thinking ?? '') + event.text } : m,
@@ -361,9 +374,7 @@ export function PropertyChat({
         );
       }
       if (event.type === 'tool_call' && event.toolCall) {
-        const label = formatAgentActivity({ toolName: event.toolCall.name });
-        setActivityLabel(label);
-        onStatusChange?.(label);
+        setLiveActivity(formatAgentActivity({ toolName: event.toolCall.name, skillId }));
       }
       if (event.type === 'error') {
         setMessages((prev) =>
@@ -377,7 +388,9 @@ export function PropertyChat({
           prev.map((m) => (m.id === assistantId ? { ...m, streaming: false } : m)),
         );
         setRunning(false);
+        onRunningChange?.(false);
         setCurrentRunId(null);
+        setActiveSkillId('');
         setActivityLabel('');
         onStatusChange?.('');
         onRunFinished?.();
@@ -393,17 +406,57 @@ export function PropertyChat({
         prev.map((m) => (m.id === assistantId ? { ...m, error: message, streaming: false } : m)),
       );
       setRunning(false);
+      onRunningChange?.(false);
+      setActiveSkillId('');
       onStatusChange?.(message);
       setActivityLabel(message);
     }
   }
 
-  const inputPlaceholder = commandSkill
-    ? `Run ${commandSkill.name}…`
-    : 'Ask about pricing, comps, staging, or listing copy…';
+  async function handleSend() {
+    await sendMessage(input.trim());
+  }
+
+  async function handleCancel() {
+    if (!currentRunId) return;
+    setLiveActivity('Cancelling…');
+    try {
+      await cancelRun(currentRunId);
+    } catch (err) {
+      setLiveActivity(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  useImperativeHandle(ref, () => ({
+    runSkill: async (skillId, message) => {
+      const modelCaps = currentAgent?.models.find((m) => m.id === selectedModel)?.capabilities
+        ?? currentAgent?.capabilities;
+      if (!actionAllowsSelection(skillId, selectedAgent, modelCaps)) {
+        const needed = formatAllowedAgents(skillId);
+        setAgentNotice(`This action needs ${needed}. Switch the Agent picker and try again.`);
+        onStatusChange?.(`Needs ${needed}`);
+        return;
+      }
+      await sendMessage(message, skillId);
+    },
+  }));
+
+  const inputPlaceholder = 'Ask about pricing, comps, staging, or listing copy…';
+  const showZillowBriefing = running && (activeSkillId === 'zillow-import' || activeSkillId === 'zillow-comp');
 
   return (
     <div className="property-chat">
+      {showZillowBriefing ? (
+        <div className="import-live-banner" role="status">
+          <strong>
+            {activeSkillId === 'zillow-comp' ? 'Importing a comparable from Zillow' : 'Importing from Zillow'}
+          </strong>
+          <p>
+            A Chrome window will open — that is the agent reading the listing. If Zillow asks you
+            to prove you are human, complete it in that window, then type <em>done</em> here.
+          </p>
+        </div>
+      ) : null}
       {(propertyConversations.length > 1 || agentNotice || memoryNotice) && (
         <div className="property-chat-header">
           {propertyConversations.length > 1 ? (
@@ -429,7 +482,9 @@ export function PropertyChat({
         <div ref={scrollRef} className="messages property-messages" onScroll={handleScroll}>
           {messages.length === 0 ? (
             <div className="empty-state property-chat-empty">
-              Property context is loaded. Pick a command or ask a question below.
+              {showZillowBriefing
+                ? 'The agent is starting the import. Progress will appear here.'
+                : 'Property context is loaded. Pick a command or ask a question below.'}
             </div>
           ) : (
             messages.map((message) => <ChatMessageBubble key={message.id} message={message} />)
@@ -445,7 +500,7 @@ export function PropertyChat({
       {running && activityLabel ? (
         <div className="agent-activity-banner" role="status" aria-live="polite">
           <span className="agent-activity-dot" aria-hidden />
-          {activityLabel}
+          <span>{activityLabel}</span>
         </div>
       ) : null}
 
@@ -476,9 +531,9 @@ export function PropertyChat({
                   disabled={running}
                   title="Agent"
                 >
-                  {availableAgents.map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {agent.name}
+                  {agents.map((agent) => (
+                    <option key={agent.id} value={agent.id} disabled={!agent.available}>
+                      {agent.available ? agent.name : `${agent.name} (not installed)`}
                     </option>
                   ))}
                 </select>
@@ -494,22 +549,6 @@ export function PropertyChat({
                   {(currentAgent?.models ?? []).map((model) => (
                     <option key={model.id} value={model.id}>
                       {model.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="agent-picker">
-                <span className="agent-picker-label">Command</span>
-                <select
-                  value={selectedCommand}
-                  onChange={(e) => handleCommandChange(e.target.value)}
-                  disabled={running}
-                  title="Skill command"
-                >
-                  <option value="">Chat</option>
-                  {skills.map((skill) => (
-                    <option key={skill.id} value={skill.id}>
-                      {getSkillCommandLabel(skill, { hasPhotos, hasPropertyJson })}
                     </option>
                   ))}
                 </select>
@@ -539,29 +578,24 @@ export function PropertyChat({
                     <button type="button" onClick={() => void startNewThread()} disabled={running}>
                       New thread
                     </button>
-                    {running && currentRunId ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMenuOpen(false);
-                          void cancelRun(currentRunId);
-                        }}
-                      >
-                        Cancel run
-                      </button>
-                    ) : null}
                   </div>
                 ) : null}
               </div>
               <button
                 type="button"
-                className="agent-send-btn"
-                onClick={() => void handleSend()}
-                disabled={running || !input.trim()}
-                aria-label="Send message"
-                title="Send (Enter)"
+                className={running ? 'agent-send-btn agent-send-btn-stop' : 'agent-send-btn'}
+                onClick={() => {
+                  if (running) {
+                    void handleCancel();
+                    return;
+                  }
+                  void handleSend();
+                }}
+                disabled={running ? !currentRunId : !input.trim()}
+                aria-label={running ? 'Cancel run' : 'Send message'}
+                title={running ? 'Cancel' : 'Send (Enter)'}
               >
-                ↑
+                {running ? <span className="agent-send-stop" aria-hidden /> : '↑'}
               </button>
             </div>
           </div>
@@ -569,7 +603,7 @@ export function PropertyChat({
       </div>
     </div>
   );
-}
+});
 
 export function useAgentDefaults() {
   const [agentId, setAgentId] = useState<AgentId>('claude');
@@ -582,11 +616,13 @@ export function useAgentDefaults() {
       const pick = list.find((a) => a.available);
       if (pick) {
         setAgentId(pick.id);
-        const model =
+        const preferred =
           pick.id === 'codex'
-            ? (pick.models.find((m) => m.id === 'gpt-5.4')?.id ?? pick.models[0]?.id ?? 'default')
-            : (pick.models[0]?.id ?? 'default');
-        setModel(model);
+            ? pick.models.find((m) => m.id === 'gpt-5.4')?.id
+            : pick.id === 'grok'
+              ? pick.models.find((m) => m.id === 'grok-4.6')?.id
+              : undefined;
+        setModel(preferred ?? pick.models[0]?.id ?? 'default');
       }
     });
   }, []);

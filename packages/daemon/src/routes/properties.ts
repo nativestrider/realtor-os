@@ -21,6 +21,7 @@ import {
   createComparable,
   deleteComparable,
   listComparables,
+  syncComparablesFromDisk,
   updateComparable,
 } from '../comparables.js';
 import type {
@@ -161,6 +162,7 @@ export function registerPropertyRoutes(
           return;
         }
         updatePropertyFromJson(db, property.id);
+        syncComparablesFromDisk(db, property.id, property.workspacePath);
         const refreshed = getProperty(db, property.id)!;
         res.status(201).json({ property: refreshed, filesWritten });
       })
@@ -338,6 +340,7 @@ export function registerPropertyRoutes(
         conversationId: conversation.id,
         message: userMessage,
         skillId,
+        runId,
         onEvent: (evt) => send('message', evt),
         onComplete: () => {
           updatePropertyFromJson(db, property.id);

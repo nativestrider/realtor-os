@@ -1,8 +1,10 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { DetectedAgent, ModelOption } from '@realtor-os/contracts';
+import type { AgentRuntimeStatus, DetectedAgent, ModelOption } from '@realtor-os/contracts';
+import { probeAgentAuth } from './auth-status.js';
 import { AGENT_DEFS, getAgentDef } from './registry.js';
 import { DEFAULT_MODEL_OPTION } from './defs.js';
+import { applyCatalogCapabilities, profileForAgent } from './capabilities.js';
 import type { ResolvedAgentLaunch, RuntimeAgentDef } from './types.js';
 
 const execFileAsync = promisify(execFile);
@@ -30,18 +32,37 @@ async function resolveBin(def: RuntimeAgentDef): Promise<string | null> {
   return null;
 }
 
+function runtimeStatus(available: boolean, signedIn: boolean): AgentRuntimeStatus {
+  if (!available) return 'not_installed';
+  if (!signedIn) return 'needs_login';
+  return 'ready';
+}
+
 async function detectOne(def: RuntimeAgentDef): Promise<DetectedAgent> {
+  const profile = profileForAgent(def.id);
   const bin = await resolveBin(def);
+  const catalog = {
+    models: applyCatalogCapabilities(def.id, def.fallbackModels),
+    capabilities: profile.capabilities,
+    imageModel: profile.imageModel,
+    loginHint: def.authLoginHint,
+    installHint: def.installHint,
+  };
   if (!bin) {
     return {
       id: def.id,
       name: def.name,
       available: false,
-      models: def.fallbackModels,
+      signedIn: false,
+      status: runtimeStatus(false, false),
+      ...catalog,
     };
   }
 
-  const version = await probeVersion(bin, def.versionArgs);
+  const [version, auth] = await Promise.all([
+    probeVersion(bin, def.versionArgs),
+    probeAgentAuth(def.id, bin),
+  ]);
   let models: ModelOption[] = def.fallbackModels;
   if (def.fetchModels) {
     try {
@@ -52,12 +73,20 @@ async function detectOne(def: RuntimeAgentDef): Promise<DetectedAgent> {
     }
   }
 
+  const resolved = models.length > 0 ? models : [DEFAULT_MODEL_OPTION];
   return {
     id: def.id,
     name: def.name,
     available: true,
     version,
-    models: models.length > 0 ? models : [DEFAULT_MODEL_OPTION],
+    models: applyCatalogCapabilities(def.id, resolved),
+    capabilities: profile.capabilities,
+    imageModel: profile.imageModel,
+    signedIn: auth.signedIn,
+    status: runtimeStatus(true, auth.signedIn),
+    accountLabel: auth.accountLabel,
+    loginHint: def.authLoginHint,
+    installHint: def.installHint,
   };
 }
 

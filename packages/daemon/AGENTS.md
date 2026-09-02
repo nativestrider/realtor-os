@@ -9,6 +9,8 @@ Express API authority for RealtorOS. Owns SQLite, property workspaces, skills re
 - `src/runner.ts` — spawn CLIs, stream events, prompt composition
 - `src/skills.ts` — scan `skills/`, stage to `.realtor-skills/`
 - `src/prompts/compose.ts` — AGENTS.md + mission + skill + property context
+- `src/runtimes/capabilities.ts` — living model/capability catalog (update when providers change)
+- `src/runtimes/action-catalog.ts` — which agents can run each action
 - `src/routes/properties.ts` — property CRUD, import, actions, file serving
 
 ## Data root

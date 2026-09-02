@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
-import type { RunEvent } from '@realtor-os/contracts';
+import type { AgentId, RunEvent } from '@realtor-os/contracts';
+import { agentCanRunAction, actionRefusalMessage } from './runtimes/action-catalog.js';
 import {
   addMessage,
   getConversation,
@@ -42,12 +43,14 @@ export interface StartChatRunOptions {
   conversationId: string;
   message: string;
   skillId?: string;
+  runId?: string;
   onEvent: (event: RunEvent) => void;
   onComplete?: () => void;
 }
 
 export async function startChatRun(options: StartChatRunOptions): Promise<string> {
   const { db, conversationId, message, skillId, onEvent, onComplete } = options;
+  const runId = options.runId ?? randomUUID();
   const conversation = getConversation(db, conversationId);
   if (!conversation) {
     onEvent({ type: 'error', message: 'Conversation not found' });
@@ -65,7 +68,6 @@ export async function startChatRun(options: StartChatRunOptions): Promise<string
     return randomUUID();
   }
 
-  const runId = randomUUID();
   const abortController = new AbortController();
 
   activeRuns.set(runId, {
@@ -79,6 +81,16 @@ export async function startChatRun(options: StartChatRunOptions): Promise<string
 
   addMessage(db, conversationId, 'user', message);
   touchConversation(db, conversationId, message.slice(0, 80) || conversation.title);
+
+  if (skillId && !agentCanRunAction(conversation.agentId as AgentId, skillId)) {
+    const refusal = actionRefusalMessage(conversation.agentId as AgentId, skillId);
+    addMessage(db, conversationId, 'assistant', refusal);
+    updateRunStatus(db, runId, 'failed');
+    onEvent({ type: 'error', message: refusal });
+    onEvent({ type: 'done' });
+    activeRuns.delete(runId);
+    return runId;
+  }
 
   if (skillId) {
     stageSkill(skillId, conversation.cwd);
@@ -110,8 +122,6 @@ export async function startChatRun(options: StartChatRunOptions): Promise<string
           priorMessages: history,
         });
 
-  const historyForClaude = history;
-
   let assistantText = '';
 
   const emit = (event: RunEvent) => {
@@ -122,10 +132,12 @@ export async function startChatRun(options: StartChatRunOptions): Promise<string
   };
 
   try {
+    const resumeSessionId =
+      launch.def.resumesSessionViaCli === false ? null : conversation.sessionId ?? null;
     const runtimeContext = {
       cwd: conversation.cwd,
-      resumeSessionId: conversation.sessionId ?? null,
-      newSessionId: conversation.sessionId ? null : randomUUID(),
+      resumeSessionId,
+      newSessionId: resumeSessionId ? null : randomUUID(),
     };
 
     const args = launch.def.buildArgs(
@@ -158,6 +170,7 @@ export async function startChatRun(options: StartChatRunOptions): Promise<string
         resumeSessionId: conversation.sessionId,
         onEvent: emit,
         signal: abortController.signal,
+        authLoginHint: launch.def.authLoginHint,
       });
 
       if (result.sessionId) {
@@ -167,7 +180,6 @@ export async function startChatRun(options: StartChatRunOptions): Promise<string
       await runClaudeStream({
         child,
         message: agentMessage,
-        history: historyForClaude,
         emit,
         signal: abortController.signal,
         runtimeContext,
@@ -221,12 +233,11 @@ export async function startChatRun(options: StartChatRunOptions): Promise<string
 async function runClaudeStream(options: {
   child: import('node:child_process').ChildProcessWithoutNullStreams;
   message: string;
-  history: Array<{ role: string; content: string }>;
   emit: (event: RunEvent) => void;
   signal: AbortSignal;
   runtimeContext: { newSessionId?: string | null };
 }) {
-  const { child, message, history, emit, signal } = options;
+  const { child, message, emit, signal } = options;
   const handler = createClaudeStreamHandler(emit);
   emit({ type: 'status', status: 'running' });
 
@@ -246,7 +257,7 @@ async function runClaudeStream(options: {
     });
   });
 
-  const stdinPayload = buildClaudeStdinPrompt(message, history);
+  const stdinPayload = buildClaudeStdinPrompt(message);
   child.stdin.write(stdinPayload);
   child.stdin.end();
   await done;

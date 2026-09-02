@@ -68,12 +68,27 @@ export function buildActionMessage(
     return `Import this Zillow listing: ${zillowUrl}\n\nFollow the zillow-import skill workflow. Save property.json and download all gallery images to images/.`;
   }
 
+  if (skill.id === 'zillow-comp' && zillowUrl) {
+    return [
+      `Import this Zillow listing as a comparable (not the subject property): ${zillowUrl}`,
+      '',
+      'Follow the zillow-comp skill. Write facts only to comps/{zpid}.json.',
+      'Do not change property.json or download photos.',
+      'If Zillow shows Press & Hold or a CAPTCHA, stop and ask me to complete it in the Chrome window.',
+    ].join('\n');
+  }
+
   if (skill.id === 'listing-copy') {
     return 'Read property.json and images/ in cwd. Write marketing copy to listing.md (headline, description, bullets). Use only facts already on disk — do not re-scrape Zillow.';
   }
 
   if (skill.id === 'virtual-staging') {
-    return 'Read images/ in cwd. Pick the room the user cares about (or start with the living room). Describe a staging plan and save any staged outputs to staged/. Do not re-import the listing.';
+    return [
+      'Follow the virtual-staging skill.',
+      'Show the Photos to stage catalog from the skill (interiors only — never exteriors), then stop and ask which photo.',
+      'Wait for my pick before generating. Save the result to staged/.',
+      'Leave property.json, images/, and listing.md unchanged.',
+    ].join('\n');
   }
 
   return skill.examplePrompt ?? `Run the ${skill.name} workflow for this property.`;

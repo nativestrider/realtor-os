@@ -34,15 +34,15 @@ Windows installs to **`%LOCALAPPDATA%\realtor-os\app`** (no admin). Data stays i
 
 If **Git for Windows** is installed, the PowerShell installer also opens the full bash wizard (AI sign-in). Without Git Bash, you get a streamlined install and start with `realtor-os` or `pnpm dev`.
 
-AI CLIs (Claude, Codex, Kimi) install separately and keep their own login — RealtorOS does not bundle them.
+AI CLIs keep their own login. The wizard **installs each CLI you pick** via `scripts/install-agent-cli.sh` (official vendor installers, user-local). You still sign in after.
 
 This script:
 
 1. Asks where to install the **app folder** (default `~/RealtorOS`)
 2. Clones (or updates) the repo there
-2. Runs **`scripts/launch-wizard.sh`**, which installs Node.js, Git, pnpm, Playwright Chromium, checks your AI CLIs, and opens the app
+2. Runs **`scripts/launch-wizard.sh`**, which installs Node.js, Git, pnpm, Playwright Chromium, the AI CLIs you pick, and opens the app
 
-You do **not** need Node, Git, or pnpm installed beforehand — the wizard installs what it can. You still need to sign in to Claude / Codex / Kimi when prompted.
+You do **not** need Node, Git, pnpm, or the AI CLIs installed beforehand — the wizard installs what it can, including Claude / Codex / Kimi / Grok when you pick them. You still need to sign in when prompted.
 
 **Only Node required for `curl | bash`:** the pipe runs in `bash`; if `curl` is missing, install it via your OS package manager first.
 
@@ -86,13 +86,14 @@ The wizard can install **Git** and **Node.js** for you, but it does **not** clon
 | **Node.js** | Yes | 20+ (LTS) | Runtime for daemon, web UI, scripts | Wizard installs via fnm/Homebrew, or https://nodejs.org |
 | **pnpm** | Yes | 10.28+ (see `packageManager` in root `package.json`) | Monorepo package manager | `corepack enable && corepack prepare pnpm@10.28.0 --activate` or https://pnpm.io/installation |
 | **Git** | For clone/updates | any recent | Clone and pull the repo | Wizard installs on Mac/Linux, or https://git-scm.com/downloads |
-| **Claude Code CLI** | One of three | latest | `claude` agent | https://docs.anthropic.com/en/docs/claude-code/overview |
-| **Codex CLI** | One of three | latest | `codex` agent (OpenAI / ChatGPT) | https://developers.openai.com/codex/cli/ |
-| **Kimi Code CLI** | One of three | latest | `kimi` agent | https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started.html |
+| **Claude Code CLI** | One of four | latest | `claude` agent | https://docs.anthropic.com/en/docs/claude-code/overview |
+| **Codex CLI** | One of four | latest | `codex` agent (OpenAI / ChatGPT) | https://developers.openai.com/codex/cli/ |
+| **Kimi Code CLI** | One of four | latest | `kimi` agent | https://www.kimi.com/code/docs/en/kimi-code-cli/guides/getting-started.html |
+| **Grok Build CLI** | One of four | latest | `grok` agent (xAI; often `~/.grok/bin`) | https://x.ai/build |
 | **Playwright Chromium** | Yes for listing-site tasks | bundled via repo | Visible browser agents control (imports, verify, supervised browsing) | `pnpm run setup:browsers` (after `pnpm install`) |
 | **Linux Chromium deps** | Linux only, if browser fails | — | System libraries for headful Chromium | `pnpm run setup:browsers:deps` |
 
-You need **at least one** of Claude / Codex / Kimi on your `PATH`. Install all three only if you plan to switch between them.
+You need **at least one** of Claude / Codex / Kimi / Grok on your `PATH`. Install more only if you plan to switch between them.
 
 ### What is *not* required
 
@@ -155,9 +156,10 @@ Install the CLIs you use, then authenticate once per machine:
 
 | Agent | Install check | Sign in |
 |-------|---------------|---------|
-| Claude | `claude --version` | `claude auth login` — verify: `claude auth status` |
-| Codex | `codex --version` | `codex login` — verify: `codex login status` |
-| Kimi | `kimi --version` | `kimi login` — credentials under `~/.kimi-code/credentials/` |
+| Claude | `claude --version` | `claude auth login` — wizard runs `install-agent-cli.sh claude` |
+| Codex | `codex --version` | `codex login` — wizard runs `install-agent-cli.sh codex` |
+| Kimi | `kimi --version` | `kimi login` — wizard runs `install-agent-cli.sh kimi` |
+| Grok | `grok --version` or `~/.grok/bin/grok --version` | `grok login` — wizard runs `scripts/install-agent-cli.sh grok` |
 
 ### 5. Start the app
 
@@ -185,7 +187,7 @@ node --version          # v20+
 pnpm --version          # 10+
 
 # At least one agent
-command -v claude || command -v codex || command -v kimi
+command -v claude || command -v codex || command -v kimi || command -v grok || test -x ~/.grok/bin/grok
 
 # Zillow browser
 test -f ~/.realtor-os/browser.json && echo "browser ok"
@@ -267,9 +269,11 @@ If you restore `server.token`, old bookmarked URLs with `#token=...` keep workin
 | `REALTOR_DAEMON_PORT` | `7457` | user | Express API port |
 | `REALTOR_DAEMON_URL` | — | launcher | Web → daemon proxy target |
 | `REALTOR_API_TOKEN` | — | launcher | Web → daemon auth |
-| `REALTOR_SELECTED_AGENTS` | — | wizard | Comma-separated `claude,codex,kimi` |
-| `REALTOR_MODEL_CLAUDE` / `_CODEX` / `_KIMI` | — | wizard | Default models |
+| `REALTOR_SELECTED_AGENTS` | — | wizard | Comma-separated `claude,codex,kimi,grok` |
+| `REALTOR_MODEL_CLAUDE` / `_CODEX` / `_KIMI` / `_GROK` | — | wizard | Default models |
 | `REALTOR_SKIP_BROWSER_INSTALL` | — | user | Skip Chromium download in install script |
+| `REALTOR_SKIP_CLI_INSTALL` | — | user | Skip all official AI CLI downloads in the wizard |
+| `REALTOR_SKIP_CLAUDE_INSTALL` / `_CODEX_` / `_KIMI_` / `_GROK_` | — | user | Skip one vendor installer |
 
 Zillow snapshot script (from a property workspace):
 
@@ -291,7 +295,7 @@ Use this after a new OS install or new computer:
 - [ ] `pnpm install` completed
 - [ ] `pnpm run setup:browsers` completed (`browser.json` exists)
 - [ ] Linux: `setup:browsers:deps` if Chromium fails to launch
-- [ ] At least one of `claude`, `codex`, `kimi` on PATH and signed in
+- [ ] At least one of `claude`, `codex`, `kimi`, `grok` on PATH and signed in
 - [ ] Codex users: default model **GPT-5.4** in Settings or wizard
 - [ ] `~/.realtor-os` restored from backup (if applicable)
 - [ ] `bash scripts/launch-wizard.sh` or `pnpm dev` starts without errors
@@ -304,7 +308,7 @@ Use this after a new OS install or new computer:
 
 | Symptom | Fix |
 |---------|-----|
-| `claude` / `codex` / `kimi` not found | Install CLI from links above; restart shell |
+| `claude` / `codex` / `kimi` / `grok` not found | Install CLI from links above; restart shell (`grok` may live in `~/.grok/bin`) |
 | Codex exits with code 1 | Switch model to **GPT-5.4**; check `codex login status` |
 | Zillow agent says no browser | Run `pnpm run setup:browsers`; confirm `~/.realtor-os/browser.json` |
 | Missing X server / `$DISPLAY` (Linux) | Log into desktop session; restart `realtor web` (auto-detects `:1` etc.); or `export REALTOR_DISPLAY=:1` before start. Check with `who`. **Do not** use Xvfb for CAPTCHA. |
@@ -325,6 +329,7 @@ Use this after a new OS install or new computer:
 | Browser setup | `pnpm run setup:browsers` | After install; wizard does this too |
 | Node setup | `bash scripts/install-node.sh` | Standalone Node 22 install (wizard calls this) |
 | Git setup | `bash scripts/install-git.sh` | Standalone Git install (wizard calls this) |
+| Agent CLIs | `bash scripts/install-agent-cli.sh claude\|codex\|kimi\|grok` | Official vendor installer (wizard calls this for each pick) |
 | Browser deps (Linux) | `pnpm run setup:browsers:deps` | Chromium launch failures |
 | Launch wizard | `bash scripts/launch-wizard.sh` | First-time or full re-setup |
 | Full install (Mac/Linux) | `bash scripts/install.sh` or `curl …/install.sh \| bash` | Clone + wizard |

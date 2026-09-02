@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { SkillSummary } from '@realtor-os/contracts';
+import { applyActionBinding, type SkillSummary } from '@realtor-os/contracts';
 import {
   getBundledSkillsRoot,
   getUserSkillsRoot,
@@ -70,7 +70,9 @@ export function listSkills(dataDir = getDefaultDataDir()): SkillSummary[] {
   const byId = new Map<string, SkillSummary>();
   for (const skill of bundled) byId.set(skill.id, skill);
   for (const skill of user) byId.set(skill.id, skill);
-  return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
+  return Array.from(byId.values())
+    .map(applyActionBinding)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function resolveSkillRoot(skillId: string, dataDir = getDefaultDataDir()): string | null {

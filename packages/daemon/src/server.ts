@@ -109,6 +109,7 @@ export function createApp(options: CreateServerOptions = {}) {
         conversationId,
         message: message.trim(),
         skillId: skillId?.trim() || undefined,
+        runId,
         onEvent: (evt) => send('message', evt),
       });
     } catch (err) {

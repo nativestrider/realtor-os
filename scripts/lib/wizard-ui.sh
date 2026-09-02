@@ -44,6 +44,7 @@ ui_header() {
 # Redraw the current step without advancing.
 ui_header_refresh() {
   local title="$1"
+  _WIZARD_HEADER_TITLE="$title"
   _ui_clear
   printf '\n' >&2
   printf '  %s%sRealtor OS%s\n' "$BOLD" "$CYAN" "$RESET" >&2

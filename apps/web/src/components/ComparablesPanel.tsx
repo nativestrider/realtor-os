@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { CompListingStatus, CreateComparableRequest, PropertyComparable } from '@realtor-os/contracts';
-import { createComparable, deleteComparable, formatPrice } from '@/lib/api';
+import { createComparable, deleteComparable, formatPrice, importCompsFolder } from '@/lib/api';
+import { isValidZillowUrl } from '@/lib/property-setup';
 
 const LISTING_STATUSES: CompListingStatus[] = ['active', 'pending', 'sold'];
 
@@ -10,6 +11,8 @@ type ComparablesPanelProps = {
   propertyId: string;
   comparables: PropertyComparable[];
   onChange: () => void;
+  onImportFromZillow?: (url: string) => void;
+  importingFromZillow?: boolean;
   embedded?: boolean;
 };
 
@@ -18,10 +21,20 @@ const emptyForm = (): CreateComparableRequest => ({
   listingStatus: 'active',
 });
 
-export function ComparablesPanel({ propertyId, comparables, onChange, embedded }: ComparablesPanelProps) {
+export function ComparablesPanel({
+  propertyId,
+  comparables,
+  onChange,
+  onImportFromZillow,
+  importingFromZillow,
+  embedded,
+}: ComparablesPanelProps) {
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<CreateComparableRequest>(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [folderBusy, setFolderBusy] = useState(false);
+  const [zillowUrl, setZillowUrl] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const resetForm = useCallback(() => {
@@ -57,6 +70,28 @@ export function ComparablesPanel({ propertyId, comparables, onChange, embedded }
     }
   };
 
+  const handleFolderSelect = async (files: FileList | null) => {
+    if (!files?.length || folderBusy) return;
+    setFolderBusy(true);
+    setError(null);
+    try {
+      await importCompsFolder(propertyId, files);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setFolderBusy(false);
+      if (folderInputRef.current) folderInputRef.current.value = '';
+    }
+  };
+
+  const handleZillowImport = () => {
+    if (!isValidZillowUrl(zillowUrl) || importingFromZillow) return;
+    setError(null);
+    onImportFromZillow?.(zillowUrl.trim());
+    setZillowUrl('');
+  };
+
   const handleDelete = async (compId: string) => {
     if (!confirm('Remove this comparable?')) return;
     try {
@@ -69,25 +104,72 @@ export function ComparablesPanel({ propertyId, comparables, onChange, embedded }
 
   return (
     <section className={`comparables-panel${embedded ? ' comparables-panel-embedded' : ''}`}>
-      {!embedded ? (
-        <>
-          <div className="comparables-header">
-            <h2>Comparables</h2>
-            <button type="button" className="secondary-btn btn-sm" onClick={() => setShowForm((v) => !v)}>
-              {showForm ? 'Cancel' : '+ Add comp'}
-            </button>
-          </div>
-          <p className="comparables-hint">Track competing listings for pricing and positioning.</p>
-        </>
-      ) : (
-        <div className="comparables-header">
-          <button type="button" className="secondary-btn btn-sm" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? 'Cancel' : '+ Add comp'}
-          </button>
-        </div>
-      )}
+      {!embedded ? <h2>Comparables</h2> : null}
+      <p className="comparables-hint">
+        Pull facts from Zillow, drop in a folder of JSON files, or enter a listing by hand.
+      </p>
 
       {error ? <div className="comps-error">{error}</div> : null}
+
+      <div className="property-setup-cards comps-intake">
+        <div className="property-setup-card">
+          <h3>Import from Zillow</h3>
+          <p>Paste a competing listing URL. The agent reads price, beds, baths, and sqft into comps/.</p>
+          <input
+            type="url"
+            value={zillowUrl}
+            onChange={(e) => setZillowUrl(e.target.value)}
+            placeholder="https://www.zillow.com/homedetails/…"
+            disabled={importingFromZillow}
+          />
+          <button
+            type="button"
+            className="primary-btn btn-sm"
+            disabled={!isValidZillowUrl(zillowUrl) || importingFromZillow || !onImportFromZillow}
+            onClick={() => handleZillowImport()}
+          >
+            {importingFromZillow ? 'Starting…' : 'Import from Zillow'}
+          </button>
+        </div>
+
+        <div className="property-setup-card">
+          <h3>Import folder</h3>
+          <p>
+            Choose a folder of comparable JSON files (<code>address</code>, <code>price</code>,{' '}
+            <code>zillowUrl</code>…).
+          </p>
+          <input
+            ref={folderInputRef}
+            type="file"
+            className="folder-input"
+            // @ts-expect-error webkitdirectory is non-standard but widely supported
+            webkitdirectory=""
+            directory=""
+            multiple
+            onChange={(e) => void handleFolderSelect(e.target.files)}
+          />
+          <button
+            type="button"
+            className="primary-btn btn-sm"
+            disabled={folderBusy}
+            onClick={() => folderInputRef.current?.click()}
+          >
+            {folderBusy ? 'Importing…' : 'Choose folder'}
+          </button>
+        </div>
+
+        <div className="property-setup-card">
+          <h3>Enter manually</h3>
+          <p>Type address, price, and facts without opening Zillow.</p>
+          <button
+            type="button"
+            className="secondary-btn btn-sm"
+            onClick={() => setShowForm((v) => !v)}
+          >
+            {showForm ? 'Cancel' : 'Fill in details'}
+          </button>
+        </div>
+      </div>
 
       {showForm ? (
         <form className="comp-form" onSubmit={(e) => void handleSubmit(e)}>
@@ -196,7 +278,7 @@ export function ComparablesPanel({ propertyId, comparables, onChange, embedded }
       ) : null}
 
       {comparables.length === 0 && !showForm ? (
-        <p className="comps-empty">No comparables yet. Add competing listings to compare price and features.</p>
+        <p className="comps-empty">No comparables yet.</p>
       ) : (
         <ul className="comp-list">
           {comparables.map((comp) => (

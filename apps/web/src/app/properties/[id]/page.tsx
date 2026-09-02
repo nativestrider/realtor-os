@@ -3,10 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import type { Property, PropertyAsset, PropertyComparable, PropertyStatus, RunEvent, SkillSummary } from '@realtor-os/contracts';
+import type {
+  AgentId,
+  DetectedAgent,
+  Property,
+  PropertyAsset,
+  PropertyComparable,
+  PropertyStatus,
+  SkillSummary,
+} from '@realtor-os/contracts';
 import { buildActionMessage } from '@/components/ActionGrid';
 import { AppShell } from '@/components/AppShell';
-import { PropertyChat, useAgentDefaults } from '@/components/PropertyChat';
+import { PropertyChat, type PropertyChatHandle } from '@/components/PropertyChat';
 import { PropertyMediaPanel } from '@/components/PropertyMediaPanel';
 import { PropertyStatusSelect } from '@/components/PropertyStatusSelect';
 import {
@@ -14,13 +22,11 @@ import {
   listAdmissibleSkills,
   type SkillAdmissibility,
 } from '@/lib/property-actions';
-import { formatAgentActivity } from '@/lib/agent-activity';
 import {
   fetchProperty,
   fetchSkills,
   formatPrice,
   getApiToken,
-  streamPropertyAction,
   updateProperty,
 } from '@/lib/api';
 
@@ -41,8 +47,11 @@ export default function PropertyDetailPage() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [statusSaving, setStatusSaving] = useState(false);
   const autorunDone = useRef(false);
-
-  const { agentId, model } = useAgentDefaults();
+  const chatRef = useRef<PropertyChatHandle>(null);
+  const [autorunTick, setAutorunTick] = useState(0);
+  const [chatAgentId, setChatAgentId] = useState<AgentId>('claude');
+  const [chatModel, setChatModel] = useState('default');
+  const [detectedAgents, setDetectedAgents] = useState<DetectedAgent[]>([]);
 
   const refresh = useCallback(async () => {
     const data = await fetchProperty(propertyId);
@@ -67,46 +76,45 @@ export default function PropertyDetailPage() {
   );
 
   const admissibleActions = useMemo(
-    () => (actionContext ? listAdmissibleSkills(skills, actionContext) : []),
-    [actionContext, skills],
+    () =>
+      actionContext
+        ? listAdmissibleSkills(skills, actionContext, {
+            agentId: chatAgentId,
+            modelId: chatModel,
+            agents: detectedAgents,
+          })
+        : [],
+    [actionContext, skills, chatAgentId, chatModel, detectedAgents],
   );
 
-  const runAction = useCallback(
-    async (skillId: string, message: string) => {
-      if (running) {
-        setStatus('An action is already running — wait for it to finish.');
-        return;
-      }
-      setRunning(true);
-      setStatus(`Running ${skillId}…`);
-
-      try {
-        await streamPropertyAction(
-          propertyId,
-          skillId,
-          { agentId, model, message },
-          (event: RunEvent) => {
-            if (event.type === 'status' && event.status) {
-              setStatus(formatAgentActivity({ status: event.status }));
-            }
-            if (event.type === 'tool_call' && event.toolCall) {
-              setStatus(formatAgentActivity({ toolName: event.toolCall.name }));
-            }
-            if (event.type === 'error') setStatus(event.message ?? 'Error');
-            if (event.type === 'done') {
-              setRunning(false);
-              setStatus('');
-              void refresh();
-            }
-          },
-        );
-      } catch (err) {
-        setRunning(false);
-        setStatus(err instanceof Error ? err.message : String(err));
-      }
+  const handleSelectionChange = useCallback(
+    (selection: { agentId: AgentId; model: string; agents: DetectedAgent[] }) => {
+      setChatAgentId(selection.agentId);
+      setChatModel(selection.model);
+      setDetectedAgents(selection.agents);
     },
-    [agentId, model, propertyId, refresh, running],
+    [],
   );
+
+  const runAction = useCallback((skillId: string, message: string) => {
+    if (running) {
+      setStatus('An action is already running — wait for it to finish.');
+      return;
+    }
+    if (!chatRef.current) {
+      setStatus('Chat is still loading…');
+      return;
+    }
+    void chatRef.current.runSkill(skillId, message);
+  }, [running]);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = window.setInterval(() => {
+      void refresh();
+    }, 3500);
+    return () => window.clearInterval(id);
+  }, [running, refresh]);
 
   const handleRunSkill = useCallback(
     (action: SkillAdmissibility) => {
@@ -119,6 +127,18 @@ export default function PropertyDetailPage() {
       void runAction(action.skill.id, buildActionMessage(action.skill, options));
     },
     [assets, property, runAction],
+  );
+
+  const handleCompZillowImport = useCallback(
+    (url: string) => {
+      const skill = skills.find((s) => s.id === 'zillow-comp') ?? {
+        id: 'zillow-comp',
+        name: 'Import comparable from Zillow',
+        description: '',
+      };
+      void runAction('zillow-comp', buildActionMessage(skill as SkillSummary, { zillowUrl: url }));
+    },
+    [runAction, skills],
   );
 
   const handleZillowImportFromSetup = useCallback(
@@ -159,6 +179,11 @@ export default function PropertyDetailPage() {
       return;
     }
 
+    if (!chatRef.current) {
+      window.setTimeout(() => setAutorunTick((n) => n + 1), 50);
+      return;
+    }
+
     autorunDone.current = true;
     if (typeof window !== 'undefined') sessionStorage.setItem(storageKey, 'started');
     router.replace(`/properties/${propertyId}`);
@@ -172,7 +197,7 @@ export default function PropertyDetailPage() {
         hasPropertyJson: property.price != null,
       }),
     );
-  }, [autorun, assets, property, propertyId, router, runAction]);
+  }, [autorun, autorunTick, assets, property, propertyId, router, runAction]);
 
   if (!property && !connectionError) {
     return (
@@ -243,6 +268,7 @@ export default function PropertyDetailPage() {
             onRunAction={handleRunSkill}
             onPropertyUpdated={() => void refresh()}
             onZillowImport={handleZillowImportFromSetup}
+            onCompZillowImport={handleCompZillowImport}
             onAssetChange={(asset) =>
               setAssets((prev) => prev.map((a) => (a.id === asset.id ? asset : a)))
             }
@@ -250,13 +276,13 @@ export default function PropertyDetailPage() {
 
           <div className="property-agent-column">
             <PropertyChat
+              ref={chatRef}
               propertyId={property.id}
               propertyLabel={propertyLabel}
-              zillowUrl={property.zillowUrl}
-              hasPhotos={assets.some((a) => a.kind === 'photo')}
-              hasPropertyJson={property.price != null}
               onStatusChange={setStatus}
+              onRunningChange={setRunning}
               onRunFinished={() => void refresh()}
+              onSelectionChange={handleSelectionChange}
             />
           </div>
         </div>

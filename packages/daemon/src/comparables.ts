@@ -1,4 +1,4 @@
-import { existsSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
@@ -124,6 +124,7 @@ export function createComparable(
   propertyId: string,
   workspacePath: string,
   input: CreateComparableRequest,
+  presetId?: string,
 ): PropertyComparable {
   const normalized = normalizeCreateInput(input);
   if (!normalized.address) {
@@ -132,7 +133,7 @@ export function createComparable(
 
   const now = new Date().toISOString();
   const comp: PropertyComparable = {
-    id: randomUUID(),
+    id: presetId?.trim() || randomUUID(),
     propertyId,
     address: normalized.address,
     title: normalized.title,
@@ -238,6 +239,99 @@ export function updateComparable(
 
   writeComparableToDisk(workspacePath, comp);
   return comp;
+}
+
+function asFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const n = Number(value.replace(/[$,]/g, ''));
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+function asTrimmedString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function asListingStatus(value: unknown): PropertyComparable['listingStatus'] | undefined {
+  return value === 'active' || value === 'pending' || value === 'sold' ? value : undefined;
+}
+
+function parseComparableJson(data: Record<string, unknown>): CreateComparableRequest | null {
+  const zillowUrl = asTrimmedString(data.zillowUrl);
+  const address = asTrimmedString(data.address) ?? (zillowUrl ? parseZillowAddressFromUrl(zillowUrl) : '');
+  if (!address || address === 'New property') {
+    if (!zillowUrl) return null;
+  }
+  return {
+    address: address && address !== 'New property' ? address : parseZillowAddressFromUrl(zillowUrl ?? ''),
+    title: asTrimmedString(data.title),
+    price: asFiniteNumber(data.price),
+    beds: asFiniteNumber(data.beds),
+    baths: asFiniteNumber(data.baths),
+    sqft: asFiniteNumber(data.sqft),
+    listingStatus: asListingStatus(data.listingStatus),
+    soldDate: asTrimmedString(data.soldDate),
+    distanceMiles: asFiniteNumber(data.distanceMiles),
+    zillowUrl,
+    zpid: asTrimmedString(data.zpid) ?? (zillowUrl ? extractZpidFromUrl(zillowUrl) : undefined),
+    notes: asTrimmedString(data.notes),
+  };
+}
+
+function findComparableMatch(
+  db: Database.Database,
+  propertyId: string,
+  input: CreateComparableRequest,
+  fileId?: string,
+): PropertyComparable | null {
+  if (fileId) {
+    const byId = getComparable(db, propertyId, fileId);
+    if (byId) return byId;
+  }
+  if (input.zpid) {
+    const row = db
+      .prepare(`SELECT * FROM property_comps WHERE property_id = ? AND zpid = ? LIMIT 1`)
+      .get(propertyId, input.zpid) as CompRow | undefined;
+    if (row) return mapComp(row);
+  }
+  if (input.zillowUrl) {
+    const row = db
+      .prepare(`SELECT * FROM property_comps WHERE property_id = ? AND zillow_url = ? LIMIT 1`)
+      .get(propertyId, input.zillowUrl) as CompRow | undefined;
+    if (row) return mapComp(row);
+  }
+  return null;
+}
+
+/** Read comps/*.json from the property workspace into SQLite. */
+export function syncComparablesFromDisk(
+  db: Database.Database,
+  propertyId: string,
+  workspacePath: string,
+): number {
+  const compsDir = join(workspacePath, 'comps');
+  if (!existsSync(compsDir)) return 0;
+  let count = 0;
+  for (const file of readdirSync(compsDir).filter((name) => name.endsWith('.json'))) {
+    try {
+      const data = JSON.parse(readFileSync(join(compsDir, file), 'utf8')) as Record<string, unknown>;
+      const parsed = parseComparableJson(data);
+      if (!parsed?.address) continue;
+      const fileId = asTrimmedString(data.id) ?? file.replace(/\.json$/i, '');
+      const existing = findComparableMatch(db, propertyId, parsed, fileId);
+      if (existing) {
+        updateComparable(db, propertyId, workspacePath, existing.id, parsed);
+      } else {
+        createComparable(db, propertyId, workspacePath, parsed, fileId);
+      }
+      count += 1;
+    } catch {
+      // skip unreadable files
+    }
+  }
+  return count;
 }
 
 export function deleteComparable(

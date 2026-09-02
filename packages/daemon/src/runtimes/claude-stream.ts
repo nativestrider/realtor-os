@@ -152,22 +152,6 @@ export function createClaudeStreamHandler(onEvent: (event: RunEvent) => void) {
   };
 }
 
-export function buildClaudeStdinPrompt(message: string, history: Array<{ role: string; content: string }>) {
-  const messages = [
-    ...history.map((m) => ({
-      type: 'user',
-      message: {
-        role: m.role,
-        content: [{ type: 'text', text: m.content }],
-      },
-    })),
-    {
-      type: 'user',
-      message: {
-        role: 'user',
-        content: [{ type: 'text', text: message }],
-      },
-    },
-  ];
-  return messages.map((m) => JSON.stringify(m)).join('\n') + '\n';
+export function buildClaudeStdinPrompt(message: string) {
+  return message.endsWith('\n') ? message : `${message}\n`;
 }

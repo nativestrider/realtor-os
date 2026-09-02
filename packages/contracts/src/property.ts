@@ -94,4 +94,9 @@ export interface SkillSummary {
   examplePrompt?: string;
   category?: string;
   featured?: boolean;
+  skillPath?: string;
+  scripts?: string[];
+  requiredCapabilities?: import('./index.js').AgentCapability[];
+  allowedAgents?: import('./index.js').AgentId[];
+  imageModel?: string;
 }

@@ -26,7 +26,7 @@ import {
   readAssetMetadataSidecar,
   writeAssetMetadataSidecar,
 } from './property-workspace.js';
-import { ensureComparablesTable } from './comparables.js';
+import { ensureComparablesTable, syncComparablesFromDisk } from './comparables.js';
 
 export function getDefaultDataDir(): string {
   return process.env.REALTOR_DATA_DIR ?? join(homedir(), '.realtor-os');
@@ -552,6 +552,7 @@ export function createPropertyFromZillow(
 export function updatePropertyFromJson(db: Database.Database, propertyId: string): Property | null {
   const property = getProperty(db, propertyId);
   if (!property) return null;
+  syncComparablesFromDisk(db, propertyId, property.workspacePath);
   const jsonPath = join(getPropertyWorkspacePath(propertyId), 'property.json');
   if (!existsSync(jsonPath)) return property;
   try {

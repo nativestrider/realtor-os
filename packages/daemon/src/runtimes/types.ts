@@ -30,6 +30,8 @@ export interface RuntimeAgentDef {
   fetchModels?: (resolvedBin: string) => Promise<ModelOption[] | null>;
   resumesSessionViaCli?: boolean;
   capturesSessionIdFromStream?: boolean;
+  authLoginHint?: string;
+  installHint?: string;
 }
 
 export interface ResolvedAgentLaunch {

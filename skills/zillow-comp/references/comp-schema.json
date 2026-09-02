@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RealtorOS Comparable",
+  "description": "Listing facts the agent writes to comps/{zpid}.json. Write only these properties. The app adds id, propertyId, createdAt, and updatedAt on ingest — leave them if they appear.",
+  "type": "object",
+  "required": ["address"],
+  "properties": {
+    "address": { "type": "string" },
+    "title": { "type": "string" },
+    "price": { "type": "number" },
+    "beds": { "type": "number" },
+    "baths": { "type": "number" },
+    "sqft": { "type": "integer" },
+    "listingStatus": { "type": "string", "enum": ["active", "pending", "sold"] },
+    "soldDate": { "type": "string", "description": "ISO date YYYY-MM-DD" },
+    "distanceMiles": { "type": "number" },
+    "zillowUrl": { "type": "string", "format": "uri" },
+    "zpid": { "type": "string" },
+    "notes": { "type": "string" }
+  }
+}

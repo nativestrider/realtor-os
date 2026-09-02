@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -178,8 +178,22 @@ async function openBrowser(url: string) {
   spawn(cmd, args, { stdio: 'ignore', detached: true }).unref();
 }
 
+function ensureContractsBuilt(): void {
+  const contractsEntry = join(rootDir, 'packages/contracts/dist/index.js');
+  if (existsSync(contractsEntry)) return;
+  const result = spawnSync('pnpm', ['--filter', '@realtor-os/contracts', 'build'], {
+    cwd: rootDir,
+    stdio: 'inherit',
+    shell: false,
+  });
+  if (result.status !== 0) {
+    throw new Error('Failed to build @realtor-os/contracts (needed by the web app).');
+  }
+}
+
 export async function runWeb(argv: string[]) {
   printRealtorLogo();
+  ensureContractsBuilt();
   const opts = parseArgs(argv);
   const host = opts.host ?? process.env.REALTOR_BIND_HOST ?? '127.0.0.1';
   const dataDir = getDefaultDataDir();
@@ -236,7 +250,19 @@ export async function runWeb(argv: string[]) {
     spawnProcess('pnpm', ['exec', 'tsx', 'packages/daemon/src/bin/daemon.ts'], daemonEnv, 'daemon'),
   );
 
-  await new Promise((resolve) => setTimeout(resolve, 800));
+  const daemonReady = await (async () => {
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      if (!(await isPortAvailable(daemonPort))) return true;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    return false;
+  })();
+  if (!daemonReady) {
+    throw new Error(
+      `Daemon did not start on port ${daemonPort}. If you just installed, run: pnpm rebuild better-sqlite3`,
+    );
+  }
 
   const webEnv = {
     ...process.env,

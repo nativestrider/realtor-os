@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 type AppShellProps = {
   children: ReactNode;
@@ -16,9 +17,9 @@ export function AppShell({ children, hideAddProperty, addPropertySlot }: AppShel
       <header className="app-shell-header">
         <Link href="/" className="app-shell-brand">
           <span className="app-shell-logo">RealtorOS</span>
-          <span className="app-shell-tagline">Properties you are selling</span>
         </Link>
         <div className="app-shell-actions">
+          <ThemeToggle />
           <Link href="/settings" className="app-shell-settings">
             Settings
           </Link>

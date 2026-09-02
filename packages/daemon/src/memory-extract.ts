@@ -144,7 +144,7 @@ async function runClaudeSilent(
       else resolve();
     });
   });
-  child.stdin.write(buildClaudeStdinPrompt(message, []));
+  child.stdin.write(buildClaudeStdinPrompt(message));
   child.stdin.end();
   await done;
 }

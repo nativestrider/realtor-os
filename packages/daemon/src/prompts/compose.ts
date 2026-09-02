@@ -14,11 +14,13 @@ import {
   formatBrowserContextForPrompt,
   formatSupervisedBrowserInstructions,
 } from '../browser-manifest.js';
+import { formatActionRuntimeForPrompt } from '../runtimes/action-catalog.js';
 
 const AGENT_MISSION_FILES: Record<AgentId, string> = {
   claude: 'claude.md',
   codex: 'codex.md',
   kimi: 'kimi.md',
+  grok: 'grok.md',
 };
 
 function readOptional(path: string, maxChars = 8000): string | null {
@@ -101,15 +103,21 @@ export function composeAgentPrompt(options: ComposePromptOptions): string {
     if (skillBody) {
       sections.push(`## Active skill: ${skillId}\n\n` + skillBody);
     }
-    if (skillId === 'zillow-import') {
+    const actionRuntime = formatActionRuntimeForPrompt(agentId, skillId);
+    if (actionRuntime) {
+      sections.push(actionRuntime);
+    }
+    if (skillId === 'zillow-import' || skillId === 'zillow-comp') {
       sections.push(formatSupervisedBrowserInstructions());
-      sections.push(
-        '## Import report reminder\n\n' +
-          'When the import finishes, write `import-report.md` and present the same report in chat: ' +
-          'what was done, fields captured, proposed image classifications (`images/.meta/*.json`), ' +
-          'potential issues (missing data, implausible values, bot challenges), ' +
-          'and recommended next steps. Flag Zillow quirks faithfully copied from source.',
-      );
+      if (skillId === 'zillow-import') {
+        sections.push(
+          '## Import report reminder\n\n' +
+            'When the import finishes, write `import-report.md` and present the same report in chat: ' +
+            'what was done, fields captured, proposed image classifications (`images/.meta/*.json`), ' +
+            'potential issues (missing data, implausible values, bot challenges), ' +
+            'and recommended next steps. Flag Zillow quirks faithfully copied from source.',
+        );
+      }
       const browserCtx = formatBrowserContextForPrompt();
       if (browserCtx) {
         sections.push('## Browser setup\n\n' + browserCtx);

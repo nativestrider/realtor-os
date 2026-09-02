@@ -1,6 +1,6 @@
 # RealtorOS
 
-Multi-agent web chat for local CLI harnesses: **Claude Code**, **Codex**, and **Kimi**.
+Multi-agent web chat for local CLI harnesses: **Claude Code**, **Codex**, **Kimi**, and **Grok Build**.
 
 Inspired by [open-design](https://github.com/nexu-io/open-design) runtime adapters and the `kimi web` entry pattern.
 
@@ -35,7 +35,7 @@ git clone https://origin.cursor.com/nativestride/realtor-os.git RealtorOS
 - **GitHub:** https://github.com/nativestrider/realtor-os  
 - **Cursor codebase:** https://cursor.com/codebase/nativestride/realtor-os
 
-The wizard installs **Node.js**, **Git** (optional), **pnpm**, and **Playwright Chromium** — you do not need to install them manually first.
+The wizard installs **Node.js**, **Git** (optional), **pnpm**, **Playwright Chromium**, and the **AI CLIs you pick** (Claude, Codex, Kimi, Grok) — you do not need to install those manually first.
 
 **Move to another computer:** clone or copy the folder, copy `~/.realtor-os/`, then run the wizard.
 
@@ -121,7 +121,7 @@ See **[docs/INSTALL.md](docs/INSTALL.md)** for the complete stack (Node, pnpm, A
 Summary:
 
 - Node.js 20+, pnpm 10+
-- At least one CLI on PATH: `claude`, `codex`, or `kimi`
+- At least one CLI on PATH: `claude`, `codex`, `kimi`, or `grok`
 - **Playwright Chromium** for Zillow — `pnpm run setup:browsers` after `pnpm install`
 - **Codex (ChatGPT):** use model **GPT-5.4** in the app
 
