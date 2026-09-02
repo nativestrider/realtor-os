@@ -17,6 +17,10 @@
 #
 set -euo pipefail
 
+# Fallback until wizard-ui.sh is sourced.
+warn() { printf '[realtor-os] warning: %s\n' "$1" >&2; }
+log()  { printf '[realtor-os] %s\n' "$1" >&2; }
+
 SCRIPT_LIB=""
 RESOLVE_CHANNEL_LOADED=0
 
@@ -78,9 +82,6 @@ INSTALL_SCRIPT_DIR=""
 # Isolated install: no sudo, no Homebrew Node — everything under ~/.local and ~/.realtor-os
 export REALTOR_ISOLATED="${REALTOR_ISOLATED:-1}"
 
-log() { printf '[realtor-os] %s\n' "$1"; }
-warn() { printf '[realtor-os] warning: %s\n' "$1" >&2; }
-
 # raw.githubusercontent.com/main is often stale. Pin to HEAD sha, then jsDelivr.
 realtor_github_main_sha() {
   curl -fsSL -H "Accept: application/vnd.github+json" \
@@ -96,24 +97,25 @@ realtor_fetch_from_origin() {
   curl -fsSL "https://cdn.jsdelivr.net/gh/nativestrider/realtor-os@main/${rel}" -o "$dest" 2>/dev/null
 }
 
-install_pause() {
-  printf '  %s ' "${1:-Press Enter to continue}"
-  if [[ -t 0 ]]; then
-    read -r _ || true
-  elif [[ -r /dev/tty ]]; then
-    read -r _ </dev/tty || true
+load_wizard_ui() {
+  local script_dir="" tmp="" sha=""
+  if script_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"; then
+    if [[ -f "${script_dir}/lib/wizard-ui.sh" ]]; then
+      # shellcheck source=lib/wizard-ui.sh
+      source "${script_dir}/lib/wizard-ui.sh"
+      return 0
+    fi
   fi
-}
-
-install_confirm() {
-  local reply=""
-  printf '  %s [y/N] ' "$1"
-  if [[ -t 0 ]]; then
-    read -r reply || true
-  elif [[ -r /dev/tty ]]; then
-    read -r reply </dev/tty || true
+  tmp="$(mktemp)"
+  sha="$(realtor_github_main_sha || true)"
+  if realtor_fetch_from_origin "$tmp" "scripts/lib/wizard-ui.sh" "$sha"; then
+    # shellcheck source=/dev/null
+    source "$tmp"
+    rm -f "$tmp"
+    return 0
   fi
-  [[ "$reply" =~ ^[Yy] ]]
+  rm -f "$tmp"
+  return 1
 }
 
 current_dir_is_offerable() {
@@ -164,41 +166,24 @@ show_realtor_logo() {
 }
 
 install_welcome() {
-  printf '\n'
+  _ui_clear
   show_realtor_logo "" || true
-  printf '\n'
-  log "Welcome! We will install RealtorOS on your Mac step by step."
-  log "You do not need programming knowledge — just read each screen"
-  log "and press Enter when you are ready. Nothing happens until then."
-  printf '\n'
-  log "Here is the full plan:"
-  log "  1. Choose where to put the app (this folder or pick another)"
-  log "  2. Download the app files (about 1–2 minutes)"
-  log "  3. Setup wizard (~5 minutes):"
-  log "       • Node.js (installed for you if missing)"
-  log "       • App dependencies"
-  log "       • Built-in browser for listing sites (~200 MB)"
-  log "       • Your AI assistants (Claude, ChatGPT, Kimi)"
-  log "       • Optional Desktop icon"
-  log "       • Open RealtorOS in your web browser"
-  printf '\n'
-  log "Two folders — this is normal:"
-  log "  App:   ~/RealtorOS (or the folder you choose)"
-  log "  Data:  ~/.realtor-os (listings, photos, settings)"
-  printf '\n'
-  log "We never ask for your Mac password and never change system Node."
-  printf '\n'
-  log "Install channel: $(realtor_channel_label)"
-  log "Version:         ${REALTOR_VERSION} (${REALTOR_GIT_REF})"
+  printf '\n' >&2
+  printf '  %s%sRealtor OS setup%s\n' "$BOLD" "$CYAN" "$RESET" >&2
+  _ui_progress 0 "$TOTAL_STAGES"
+  printf '  %s────────────────────────────────────────%s\n\n' "$DIM" "$RESET" >&2
+  say "One setup — 10 steps. We explain each one before anything happens."
+  say "No Mac password. System Node is left alone."
+  printf '\n' >&2
+  note "App:   folder you choose (often ~/RealtorOS)"
+  note "Data:  ~/.realtor-os  (listings, photos, settings)"
+  printf '\n' >&2
+  log "Channel: $(realtor_channel_label) · ${REALTOR_VERSION} (${REALTOR_GIT_REF})"
   if [[ ! -t 0 ]] && [[ "${REALTOR_CHANNEL}" == "stable" ]]; then
-    log "Want dev instead? Cancel (Ctrl-C) and run:"
-    log "  curl -fsSL .../install.sh | REALTOR_CHANNEL=dev bash"
+    note "Dev instead: curl -fsSL .../install.sh | REALTOR_CHANNEL=dev bash"
   fi
-  if [[ "${REALTOR_CHANNEL}" == "dev" ]]; then
-    log "Dev channel — latest code from main; for developers and testers."
-  fi
-  printf '\n'
-  install_pause "Press Enter when you have read this and are ready to start"
+  printf '\n' >&2
+  pause "Press Enter to start"
 }
 
 ensure_git() {
@@ -330,7 +315,7 @@ choose_other_folder() {
       return 0
     fi
   fi
-  printf '  Install folder [%s]: ' "$default"
+  printf '  Install folder [%s]: ' "$default" >&2
   if [[ -t 0 ]]; then
     read -r reply || true
   elif [[ -r /dev/tty ]]; then
@@ -343,6 +328,27 @@ choose_other_folder() {
   fi
 }
 
+# Keep a single absolute path even if logs leaked into a command substitution.
+sanitize_install_dir() {
+  local raw="$1" line last=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    if [[ "$line" == /* && "$line" != *'[realtor-os]'* ]]; then
+      last="$line"
+    fi
+  done <<< "$raw"
+  if [[ -n "$last" ]]; then
+    printf '%s' "$last"
+    return 0
+  fi
+  if [[ "$raw" == /* && "$raw" != *$'\n'* ]]; then
+    printf '%s' "$raw"
+    return 0
+  fi
+  return 1
+}
+
 pick_install_dir() {
   if [[ -n "${REALTOR_INSTALL_DIR:-}" ]]; then
     INSTALL_DIR="$REALTOR_INSTALL_DIR"
@@ -351,7 +357,7 @@ pick_install_dir() {
   fi
 
   local default="${HOME}/RealtorOS"
-  local picker=""
+  local picker="" picked=""
 
   if picker="$(resolve_picker_script 2>/dev/null || true)" && [[ -n "$picker" ]] && [[ -f "$picker" ]]; then
     :
@@ -359,37 +365,53 @@ pick_install_dir() {
     picker=""
   fi
 
-  printf '\n'
-  log "STEP 1 of 3 — Choose install folder"
+  ui_header "Install folder"
+
+  if [[ -f "${PWD}/scripts/launch-wizard.sh" ]]; then
+    INSTALL_DIR="$PWD"
+    say "This folder already has Realtor OS."
+    ok "$INSTALL_DIR"
+    export REALTOR_INSTALL_DIR="$INSTALL_DIR"
+    return
+  fi
 
   if current_dir_is_offerable; then
-    log "Your Terminal is open in:"
-    log "  ${PWD}"
-    log "Install RealtorOS in this folder, or choose a different one."
-    install_pause "Press Enter to continue"
-    if install_confirm "Install RealtorOS in this folder (${PWD})?"; then
+    say "Terminal is open in:"
+    ok "$PWD"
+    say "Install here, or pick another folder."
+    pause "Press Enter to continue"
+    if confirm "Install Realtor OS in this folder"; then
       INSTALL_DIR="$PWD"
-      log "Will install to: ${INSTALL_DIR}"
+      ok "Will install to: ${INSTALL_DIR}"
       export REALTOR_INSTALL_DIR="$INSTALL_DIR"
       return
     fi
-    log "OK — let's pick another folder."
+    note "OK — pick another folder."
   else
-    log "Choose where the RealtorOS app folder should live on your Mac."
+    say "Choose where the app folder should live on your Mac."
   fi
 
-  INSTALL_DIR="$(choose_other_folder "$default" "$picker")"
+  picked="$(choose_other_folder "$default" "$picker")"
+  if ! INSTALL_DIR="$(sanitize_install_dir "$picked")"; then
+    warn "Could not read a valid install folder."
+    exit 1
+  fi
 
-  log "Will install to: ${INSTALL_DIR}"
+  ok "Will install to: ${INSTALL_DIR}"
   export REALTOR_INSTALL_DIR="$INSTALL_DIR"
 }
 
 write_install_env() {
   mkdir -p "$REALTOR_DATA_DIR"
-  printf 'REALTOR_INSTALL_DIR=%s\nREALTOR_DATA_DIR=%s\nREALTOR_ISOLATED=%s\nREALTOR_CHANNEL=%s\nREALTOR_VERSION=%s\nREALTOR_GIT_REF=%s\nREALTOR_FROZEN_LOCKFILE=%s\n' \
-    "$INSTALL_DIR" "$REALTOR_DATA_DIR" "$REALTOR_ISOLATED" \
-    "$REALTOR_CHANNEL" "$REALTOR_VERSION" "$REALTOR_GIT_REF" "$REALTOR_FROZEN_LOCKFILE" \
-    >"${REALTOR_DATA_DIR}/install.env"
+  {
+    printf 'REALTOR_INSTALL_DIR=%q\n' "$INSTALL_DIR"
+    printf 'REALTOR_DATA_DIR=%q\n' "$REALTOR_DATA_DIR"
+    printf 'REALTOR_ISOLATED=%q\n' "$REALTOR_ISOLATED"
+    printf 'REALTOR_CHANNEL=%q\n' "$REALTOR_CHANNEL"
+    printf 'REALTOR_VERSION=%q\n' "$REALTOR_VERSION"
+    printf 'REALTOR_GIT_REF=%q\n' "$REALTOR_GIT_REF"
+    printf 'REALTOR_FROZEN_LOCKFILE=%q\n' "$REALTOR_FROZEN_LOCKFILE"
+  } >"${REALTOR_DATA_DIR}/install.env"
 }
 
 main() {
@@ -404,35 +426,34 @@ main() {
   fi
   realtor_resolve_channel
 
+  export TOTAL_STAGES=10
+  load_wizard_ui || true
+  wizard_ui_init
+
   install_welcome
-  log "RealtorOS installer (isolated user environment)"
-  log "Data folder:    ${REALTOR_DATA_DIR:-${HOME}/.realtor-os}"
-  log "Does not use sudo or change system Node/npm by default."
 
   if [[ -n "$INSTALL_SCRIPT_DIR" ]]; then
     repo_root="$(cd "${INSTALL_SCRIPT_DIR}/.." && pwd)"
     if [[ -f "${repo_root}/scripts/launch-wizard.sh" ]]; then
-      log "Dev checkout detected — running wizard from: ${repo_root}"
       cd "$repo_root"
       INSTALL_DIR="$repo_root"
       export REALTOR_INSTALL_DIR="$repo_root"
       export REALTOR_REPO_ROOT="$repo_root"
       write_install_env
+      export REALTOR_WIZARD_FROM_INSTALL=0
       exec bash scripts/launch-wizard.sh
     fi
     REALTOR_INSTALL_SCRIPT_DIR="$INSTALL_SCRIPT_DIR"
   fi
 
   pick_install_dir
-  log "App folder:     ${INSTALL_DIR}"
 
-  printf '\n'
-  log "STEP 2 of 3 — Download the app"
-  log "Channel: ${REALTOR_CHANNEL} — fetching ${REALTOR_GIT_REF}"
-  log "NEXT: We download RealtorOS into:"
-  log "  ${INSTALL_DIR}"
-  log "This usually takes 1–2 minutes. You will see download progress below."
-  install_pause "Press Enter to start the download"
+  ui_header "Download Realtor OS"
+  say "Channel: ${REALTOR_CHANNEL} — fetching ${REALTOR_GIT_REF}"
+  say "Destination:"
+  ok "$INSTALL_DIR"
+  note "Usually 1–2 minutes. Progress from git appears below."
+  pause "Press Enter to start the download"
 
   clone_or_update
 
@@ -441,17 +462,15 @@ main() {
     exit 1
   fi
 
-  printf '\n'
-  log "STEP 3 of 3 — Setup wizard"
-  show_realtor_logo "$INSTALL_DIR" || true
-  log "NEXT: A guided setup runs in this Terminal window."
-  log "Each step is explained before anything happens on your Mac."
-  install_pause "Press Enter to start the setup wizard"
-  log "Starting setup wizard…"
+  ok "App files are in place."
+  pause "Press Enter to continue setup"
   cd "$INSTALL_DIR"
   write_install_env
   export REALTOR_INSTALL_DIR="$INSTALL_DIR"
   export REALTOR_REPO_ROOT="$INSTALL_DIR"
+  export REALTOR_WIZARD_FROM_INSTALL=1
+  export _STAGE_INDEX
+  export TOTAL_STAGES
   exec bash scripts/launch-wizard.sh
 }
 

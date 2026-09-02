@@ -11,114 +11,47 @@
 set -euo pipefail
 
 # ──────────────────────────────────────────────────────────────────────────
-# Wizard library — delightful, consistent UX. Identical across every wizard.
+# Shared UI — scripts/lib/wizard-ui.sh (also used by install.sh)
 # ──────────────────────────────────────────────────────────────────────────
 
-if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]; then
-  BOLD=$(tput bold); DIM=$(tput dim); RESET=$(tput sgr0)
-  BLUE=$(tput setaf 4); GREEN=$(tput setaf 2); YELLOW=$(tput setaf 3); RED=$(tput setaf 1)
-else
-  BOLD=""; DIM=""; RESET=""; BLUE=""; GREEN=""; YELLOW=""; RED=""
-fi
+_WIZARD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/wizard-ui.sh
+source "${_WIZARD_DIR}/lib/wizard-ui.sh"
+# shellcheck source=realtor-logo.sh
+source "${_WIZARD_DIR}/realtor-logo.sh"
 
-TOTAL_STAGES=0
-
-_STAGE_INDEX=0
 ENV_FILE="${ENV_FILE:-.realtor-preferences.env}"
 WRITTEN_ENV=()
 WRITTEN_SECRET=()
 SKIPPED=()
 
-_clear() {
-  [[ -t 1 ]] || return 0
-  if command -v tput >/dev/null 2>&1; then tput clear; else printf '\033[2J\033[3J\033[H'; fi
-}
-
-# shellcheck source=realtor-logo.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/realtor-logo.sh"
-
 banner() {
-  _clear
-  realtor_show_logo "$BOLD" "$DIM" "$BLUE" "$RESET"
-  printf '%s  %s steps — about 5 minutes%s\n\n' "$DIM" "$TOTAL_STAGES" "$RESET"
-  printf '%s  Welcome! This setup will help you chat with AI assistants\n' "$DIM"
-  printf '  (like Claude, ChatGPT Codex, or Kimi) right in your web browser.\n\n'
-  printf '  Everything stays in your user folder — we do not change system\n'
-  printf '  Node or require administrator access (Mac, Linux, WSL).\n\n'
-  printf '  We explain each step BEFORE it happens. When we ask you to press\n'
-  printf '  Enter, read the message first — nothing runs until you confirm.\n\n'
-  printf '  We will:\n'
-  printf '    1. Check Node.js (install it for you if missing)\n'
-  printf '    2. Download the app files (about 1 minute, one time)\n'
-  printf '    3. Download a built-in browser for listing sites (~200 MB, one time)\n'
-  printf '    4. Ask which AI assistants you use\n'
-  printf '    5. Check that you are signed in to them\n'
-  printf '    6. Optionally put an icon on your Desktop\n'
-  printf '    7. Open RealtorOS in your web browser\n\n'
-  printf '  Keep this Terminal window open while you chat. When you are done,\n'
-  printf '  come back here and press Ctrl-C to close the app.\n\n'
+  _ui_clear
+  realtor_show_logo "$BOLD" "$DIM" "$CYAN" "$RESET"
+  note "10 steps · about 5 minutes"
+  printf '\n' >&2
+  say "Welcome. This setup gets Realtor OS running on your Mac."
+  say "Chat with Claude, Codex, or Kimi in your web browser."
+  printf '\n' >&2
+  note "We never ask for your Mac password or change system Node."
+  note "App folder and listings stay under your user account."
   if [[ -n "${REALTOR_CHANNEL:-}" ]]; then
-    printf '  Channel: %s · version %s (%s)\n' \
-      "${REALTOR_CHANNEL}" "${REALTOR_VERSION:-?}" "${REALTOR_GIT_REF:-?}"
-    if [[ "${REALTOR_CHANNEL}" == "dev" ]]; then
-      printf '  (Dev — latest from main; dependency versions may shift.)\n'
-    fi
-    printf '\n'
+    printf '\n' >&2
+    log "Channel: ${REALTOR_CHANNEL} · ${REALTOR_VERSION:-?} (${REALTOR_GIT_REF:-?})"
   fi
-  printf '  You can stop anytime (Ctrl-C) and come back later — we remember\n'
-  printf '  your choices.%s\n' "$RESET"
-  note "Full software list & reinstall guide: docs/INSTALL.md"
-  pause "Press Enter when you're ready"
+  printf '\n' >&2
+  pause "Press Enter to start"
 }
-
-stage() {
-  _clear
-  _STAGE_INDEX=$((_STAGE_INDEX + 1))
-  printf '\n%s%s▸ Step %s of %s · %s%s\n' \
-    "$BOLD" "$BLUE" "$_STAGE_INDEX" "$TOTAL_STAGES" "$1" "$RESET"
-}
-
-# Redraw the current step header without advancing the step counter.
-stage_refresh() {
-  _clear
-  printf '\n%s%s▸ Step %s of %s · %s%s\n' \
-    "$BOLD" "$BLUE" "$_STAGE_INDEX" "$TOTAL_STAGES" "$1" "$RESET"
-}
-
-say()  { printf '  %s\n' "$1"; }
-step() { printf '  %s•%s %s\n' "$BLUE" "$RESET" "$1"; }
-note() { printf '  %s%s%s\n' "$DIM" "$1" "$RESET"; }
-warn() { printf '  %s⚠ %s%s\n' "$YELLOW" "$1" "$RESET"; }
 
 open_url() {
   local url="$1"
-  printf '  %s↗ opening%s %s\n' "$GREEN" "$RESET" "$url"
+  printf '  %s↗ opening%s %s\n' "$GREEN" "$RESET" "$url" >&2
   { if   command -v wslview     >/dev/null 2>&1; then wslview "$url"
     elif command -v explorer.exe >/dev/null 2>&1; then explorer.exe "$url"
     elif command -v xdg-open    >/dev/null 2>&1; then xdg-open "$url"
     elif command -v open        >/dev/null 2>&1; then open "$url"
     else warn "couldn't open a browser — visit it manually: $url"; fi
   } >/dev/null 2>&1 || warn "couldn't open a browser — visit it manually: $url"
-}
-
-pause() {
-  printf '  %s%s%s ' "$DIM" "${1:-Press Enter to continue}" "$RESET"
-  if [[ -t 0 ]]; then
-    read -r _ || true
-  elif [[ -r /dev/tty ]]; then
-    read -r _ </dev/tty || true
-  fi
-}
-
-confirm() {
-  local reply=""
-  printf '  %s? %s [y/N] ' "$YELLOW" "$1"
-  if [[ -t 0 ]]; then
-    read -r reply || true
-  elif [[ -r /dev/tty ]]; then
-    read -r reply </dev/tty || true
-  fi
-  [[ "$reply" =~ ^[Yy] ]]
 }
 
 # Read one key for interactive menus (↑/↓/Space/Enter).
@@ -620,7 +553,8 @@ source "$ROOT/scripts/realtor-env.sh"
 export REALTOR_REPO_ROOT="$ROOT"
 export REALTOR_INSTALL_DIR="${REALTOR_INSTALL_DIR:-$ROOT}"
 
-TOTAL_STAGES=9
+export TOTAL_STAGES="${TOTAL_STAGES:-10}"
+wizard_ui_init
 
 cmd_exists() { command -v "$1" >/dev/null 2>&1; }
 
@@ -690,10 +624,6 @@ check_kimi_login() {
   cmd_exists kimi || return 1
   [[ -d "${HOME}/.kimi-code/credentials" ]] || return 1
   [[ -n "$(ls -A "${HOME}/.kimi-code/credentials" 2>/dev/null || true)" ]]
-}
-
-ok_msg() {
-  printf '  %s✓ %s%s\n' "$GREEN" "$1" "$RESET"
 }
 
 guide_login() {
@@ -814,9 +744,18 @@ console.log(`  ✓ Saved your preferences`);
 NODE
 }
 
-banner
+if [[ "${REALTOR_WIZARD_FROM_INSTALL:-}" == "1" ]]; then
+  note "Continuing setup in ${ROOT}"
+else
+  banner
+  stage "Using this folder"
+  say "App files are already here — no download needed."
+  ok "$ROOT"
+  _STAGE_INDEX=2
+  pause "Press Enter to continue"
+fi
 
-# ── 1. Node.js + Git ────────────────────────────────────────────────────────
+# ── 3. Node.js + Git ────────────────────────────────────────────────────────
 stage "Is your computer ready?"
 say "NEXT: We check whether Node.js is installed."
 say "Node.js runs the app on your Mac — like an engine under the hood."
@@ -1071,13 +1010,13 @@ if ! confirm "Open RealtorOS now"; then
 fi
 
 # ── 8. Launch ───────────────────────────────────────────────────────────────
-stage "Opening RealtorOS"
+stage "Opening Realtor OS"
 realtor_show_logo "$BOLD" "$DIM" "$BLUE" "$RESET"
-LAUNCHER="$(bash "$ROOT/scripts/write-launcher.sh" "$ROOT")"
+LAUNCHER="$(bash "$ROOT/scripts/write-shortcuts.sh" launcher "$ROOT")"
 note "Terminal command: realtor-os (if ~/.local/bin is on your PATH)"
 if $CREATE_DESKTOP_SHORTCUT; then
   say "NEXT: Creating the Desktop icon…"
-  if DESKTOP_SHORTCUT="$(bash "$ROOT/scripts/write-desktop-shortcut.sh" "$ROOT" 2>/dev/null)"; then
+  if DESKTOP_SHORTCUT="$(bash "$ROOT/scripts/write-shortcuts.sh" desktop "$ROOT" 2>/dev/null)"; then
     ok_msg "Added to Desktop: $(basename "$DESKTOP_SHORTCUT")"
   else
     warn "Could not add a Desktop icon — you can still run: bash scripts/launch-wizard.sh"
